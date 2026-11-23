@@ -4,7 +4,9 @@
 
 <p align="center">VS Code-style, focus-aware keyboard shortcuts for the Paseo desktop and web app.</p>
 
-![Keyboard Shortcuts table](assets/screenshots/keyboard-shortcuts.png)
+<p align="center">
+  <img src="assets/screenshots/keyboard-shortcuts.png" width="860" alt="Keyboard Shortcuts table listing Paseo shortcuts and a user Ctrl+C binding with a when clause">
+</p>
 
 One `keybindings.json` of `{ key, command, when }` entries remaps both the plugin's commands (copy,
 paste, cursor movement, terminal keys) and Paseo's own actions (workspaces, panes, tabs, composer).
@@ -24,7 +26,9 @@ paseo plugin install github:lmgarret/paseo-keybindings
 
 Open the Command Center (Cmd/Ctrl+K) and type `key`:
 
-![Command Center entries](assets/screenshots/command-center.png)
+<p align="center">
+  <img src="assets/screenshots/command-center.png" width="560" alt="Command Center showing the two Preferences: Open Keyboard Shortcuts entries">
+</p>
 
 - **Preferences: Open Keyboard Shortcuts**: a searchable table of every command and Paseo
   shortcut. Click the pencil on a row, press the new key combination, then Enter.
