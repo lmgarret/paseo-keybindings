@@ -1,6 +1,7 @@
 {
   "id": "paseo-keybindings",
   "name": "Keybindings",
+  "icon": "assets/icon.png",
   "media": [],
   "requirements": {
     "paseo": ">=0.17.3"

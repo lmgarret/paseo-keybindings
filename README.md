@@ -1,4 +1,6 @@
-# Keybindings
+<p align="center"><img src="assets/icon.svg" width="112" alt="Keybindings logo"></p>
+
+<h1 align="center">Keybindings</h1>
 
 A Paseo plugin that remaps keyboard shortcuts in the desktop/web app: a list of
 `{ key, command, when, args }` bindings evaluated by one capture-phase `keydown` listener.

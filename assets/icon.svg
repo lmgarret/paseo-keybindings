@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>Keybindings</title>
+  <rect width="128" height="128" rx="28" fill="#111827"/>
+  <rect x="14" y="32" width="100" height="64" rx="12" fill="#374151"/>
+  <rect x="22" y="40" width="14" height="13" rx="3" fill="#9ca3af"/><rect x="40" y="40" width="14" height="13" rx="3" fill="#9ca3af"/><rect x="58" y="40" width="14" height="13" rx="3" fill="#9ca3af"/><rect x="76" y="40" width="14" height="13" rx="3" fill="#9ca3af"/><rect x="94" y="40" width="14" height="13" rx="3" fill="#9ca3af"/>
+  <rect x="22" y="58" width="14" height="13" rx="3" fill="#9ca3af"/><rect x="40" y="58" width="14" height="13" rx="3" fill="#34d399"/><rect x="58" y="58" width="14" height="13" rx="3" fill="#9ca3af"/><rect x="76" y="58" width="14" height="13" rx="3" fill="#9ca3af"/><rect x="94" y="58" width="14" height="13" rx="3" fill="#9ca3af"/>
+  <rect x="22" y="76" width="14" height="13" rx="3" fill="#9ca3af"/>
+  <rect x="40" y="76" width="50" height="13" rx="3" fill="#9ca3af"/>
+  <rect x="94" y="76" width="14" height="13" rx="3" fill="#9ca3af"/>
+</svg>
