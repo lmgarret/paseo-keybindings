@@ -1,6 +1,6 @@
-# paseo-keybindings
+# Keybindings
 
-A Paseo plugin that remaps keyboard shortcuts in the desktop/web app, VS Code style: a list of
+A Paseo plugin that remaps keyboard shortcuts in the desktop/web app: a list of
 `{ key, command, when, args }` bindings evaluated by one capture-phase `keydown` listener.
 
 No bindings ship by default: until you add some to `keybindings.json`, every key behaves as before.
@@ -40,7 +40,7 @@ Open them from the Command Center (Cmd/Ctrl+K):
   and source (Default/User). Search by text or with **Record Keys**. Each row can be changed, added,
   removed, reset, or shown in the JSON. The dialog records keys (press the combination, then Enter)
   and checks the `when` clause as you type. Editing a default adds a user override plus a
-  `-command` entry that removes the default, as VS Code does. Also under Settings, Plugins.
+  `-command` entry that removes the default. Also under Settings, Plugins.
 - **Preferences: Open Keyboard Shortcuts (JSON)**: an editor for `keybindings.json` with syntax
   highlighting, line numbers, problems (syntax errors, invalid keys or `when` clauses, unknown
   commands or contexts) with jump-to-line, completion for commands, contexts, and property names

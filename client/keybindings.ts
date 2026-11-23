@@ -22,7 +22,7 @@ export interface CompiledKeybinding {
 /**
  * Compiles bindings in order. Invalid entries are reported through `onError` and skipped.
  * A "-command" entry removes earlier entries with the same key and command (and the same
- * `when`, when it is given), like VS Code.
+ * `when`, when it is given).
  */
 export function compileKeybindings(
   bindings: readonly Keybinding[],

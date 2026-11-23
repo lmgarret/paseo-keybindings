@@ -42,7 +42,7 @@ function validateWhen(when: string): { error: string | null; warning: string | n
   return { error: null, warning: unknown.length ? `Unknown context: ${unknown.join(", ")} (always false)` : null };
 }
 
-/** VS Code's "Change Keybinding" / "Change When Expression", in one dialog. */
+/** Changes or adds a keybinding: key (typed or recorded), when clause, and args. */
 export function BindingDialog({ theme, open, title, command, initial, onSave, onClose }: BindingDialogProps) {
   const c = theme.colors;
   const info = commandInfo(command.replace(/^-/, ""));

@@ -1,4 +1,4 @@
-Remaps keyboard shortcuts in the Paseo desktop and web app using VS Code style bindings: a key, a command, and an optional `when` clause such as `!terminalFocus && hasSelection`.
+Remaps keyboard shortcuts in the Paseo desktop and web app. Each binding is a key, a command, and an optional `when` clause such as `!terminalFocus && hasSelection`, so the same key can act differently in the terminal and in chat.
 
 No bindings are active until you add them. A typical one makes Ctrl+C copy selected text in chat, the composer, and agent output, while Ctrl+C in a focused terminal still interrupts the running process. This suits macOS setups that emulate Windows or Linux shortcuts with a tool like Karabiner-Elements, which cannot tell which pane has focus.
 

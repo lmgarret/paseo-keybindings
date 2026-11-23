@@ -1,4 +1,4 @@
-// VS Code-style `when` clauses: identifiers combined with !, &&, ||, and parentheses.
+// `when` clauses: identifiers combined with !, &&, ||, and parentheses.
 // Precedence: ! binds tightest, then &&, then ||. Unknown identifiers are false.
 
 export type WhenContext = Readonly<Record<string, boolean | undefined>>;

@@ -47,7 +47,7 @@ const KEY_ALIASES: Record<string, string> = {
   plus: "+",
 };
 
-// Physical keys whose meaning should not depend on Shift/Alt or the layout (US positions, like VS Code).
+// Physical keys whose meaning should not depend on Shift/Alt or the layout (US positions).
 const CODE_KEYS: Record<string, string> = {
   Minus: "-",
   Equal: "=",

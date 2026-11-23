@@ -95,7 +95,7 @@ export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings
   return rows.sort((a, b) => a.title.localeCompare(b.title) || order[a.source] - order[b.source]);
 }
 
-/** Filters by free text, or by exact key when `recordedKey` is set (VS Code's "Record Keys"). */
+/** Filters by free text, or by exact key when `recordedKey` is set ("Record Keys"). */
 export function filterRows(rows: readonly ShortcutRow[], query: string, recordedKey?: string): ShortcutRow[] {
   if (recordedKey) return rows.filter((row) => row.key === recordedKey);
   const q = query.trim().toLowerCase();
@@ -106,7 +106,7 @@ export function filterRows(rows: readonly ShortcutRow[], query: string, recorded
 }
 
 // ---------------------------------------------------------------------------
-// Row actions → edits of the user file (VS Code semantics)
+// Row actions → edits of the user file
 
 /** Changes a row's key/when/args. Default rows get a user override plus a removal of the default. */
 export function editRow(text: string, user: UserKeybindings, row: ShortcutRow, next: Keybinding): TextEdit {
