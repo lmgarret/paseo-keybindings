@@ -2,7 +2,8 @@
 // and is a no-op on native platforms.
 import { copyText } from "@getpaseo/plugin/client/ui";
 import { Platform } from "react-native";
-import { chordFromEvent, type KeyEventLike } from "./keys";
+import type { EditResult } from "./editor-ops";
+import { type Chord, chordFromEvent, type KeyEventLike } from "./keys";
 import { compileKeybindings, dispatchKeybinding, type Keybinding } from "./keybindings";
 import { lineEnd, lineStart, wordEndAfter, wordStartBefore } from "./text-motion";
 import type { WhenContext } from "./when";
@@ -31,16 +32,27 @@ interface DomKeyboardEvent extends KeyEventLike {
   target: unknown;
   isComposing: boolean;
   defaultPrevented: boolean;
+  repeat: boolean;
   preventDefault(): void;
   stopPropagation(): void;
 }
 type KeydownListener = (event: DomKeyboardEvent) => void;
+interface DomEditorNode extends DomTextControl {
+  focus(): void;
+  setAttribute(name: string, value: string): void;
+  style: Record<string, string>;
+  addEventListener(type: "keydown", listener: KeydownListener): void;
+  removeEventListener(type: "keydown", listener: KeydownListener): void;
+}
 declare const window: {
   addEventListener(type: "keydown", listener: KeydownListener, capture: boolean): void;
   removeEventListener(type: "keydown", listener: KeydownListener, capture: boolean): void;
 };
 declare const document: {
   activeElement: DomElement | null;
+  head: { appendChild(node: unknown): void };
+  getElementById(id: string): { textContent: string | null } | null;
+  createElement(tag: "style"): { id: string; textContent: string | null };
   getSelection(): DomSelection | null;
   execCommand(command: string, showUi?: boolean, value?: string): boolean;
 };
@@ -254,21 +266,32 @@ export const COMMANDS: Readonly<Record<string, (args: unknown) => boolean>> = {
 // ---------------------------------------------------------------------------
 // Listener
 
-/**
- * Registers one capture-phase keydown listener on window. Returns its remover.
- * No-op on native platforms.
- */
-export function installKeybindings(bindings: readonly Keybinding[]): () => void {
-  if (Platform.OS !== "web") return () => {};
+/** Shared across installations (one per connected host) so the recorder pauses all of them. */
+const shared = globalThis as { __paseoKeybindingsRecording?: number };
+const isRecording = () => (shared.__paseoKeybindingsRecording ?? 0) > 0;
 
-  const compiled = compileKeybindings(bindings, (binding, error) =>
-    console.warn(`[keybindings] skipping ${JSON.stringify(binding)}: ${error.message}`),
-  );
+export interface KeybindingsController {
+  /** Replaces the active bindings (defaults + user file). */
+  setBindings(bindings: readonly Keybinding[]): void;
+  dispose(): void;
+}
+
+/**
+ * Registers one capture-phase keydown listener on window. No-op on native platforms.
+ */
+export function installKeybindings(bindings: readonly Keybinding[]): KeybindingsController {
+  if (Platform.OS !== "web") return { setBindings() {}, dispose() {} };
+
+  const compile = (list: readonly Keybinding[]) =>
+    compileKeybindings(list, (binding, error) =>
+      console.warn(`[keybindings] skipping ${JSON.stringify(binding)}: ${error.message}`),
+    );
+  let compiled = compile(bindings);
   const platform = platformFlags();
 
   const onKeyDown: KeydownListener = (event) => {
-    // A second installation (one per connected host) sees the event already handled.
-    if (event.defaultPrevented || event.isComposing) return;
+    // A second installation sees the event already handled; the recorder owns keys while active.
+    if (event.defaultPrevented || event.isComposing || isRecording()) return;
     const chord = chordFromEvent(event);
     if (!chord) return;
     const el = focusedElement(event);
@@ -283,5 +306,138 @@ export function installKeybindings(bindings: readonly Keybinding[]): () => void 
   };
 
   window.addEventListener("keydown", onKeyDown, true);
-  return () => window.removeEventListener("keydown", onKeyDown, true);
+  return {
+    setBindings(next) {
+      compiled = compile(next);
+    },
+    dispose() {
+      window.removeEventListener("keydown", onKeyDown, true);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Key recorder
+
+export const canRecordKeys = Platform.OS === "web";
+
+/**
+ * Captures key chords until stopped: every chord goes to `onChord`, bindings are paused, and
+ * keys do not reach the app. Plain Enter calls `onEnter`, plain Escape calls `onEscape`.
+ */
+export function recordKeys(handlers: {
+  onChord(chord: Chord): void;
+  onEnter?(): void;
+  onEscape?(): void;
+}): () => void {
+  if (!canRecordKeys) return () => {};
+  shared.__paseoKeybindingsRecording = (shared.__paseoKeybindingsRecording ?? 0) + 1;
+  const onKeyDown: KeydownListener = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const chord = chordFromEvent(event);
+    if (!chord || event.repeat) return;
+    const plain = !chord.ctrl && !chord.alt && !chord.meta && !chord.shift;
+    if (plain && chord.key === "enter" && handlers.onEnter) handlers.onEnter();
+    else if (plain && chord.key === "escape" && handlers.onEscape) handlers.onEscape();
+    else handlers.onChord(chord);
+  };
+  window.addEventListener("keydown", onKeyDown, true);
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    window.removeEventListener("keydown", onKeyDown, true);
+    shared.__paseoKeybindingsRecording = Math.max(0, (shared.__paseoKeybindingsRecording ?? 1) - 1);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// JSON editor support (the editor's TextInput is a <textarea> on web)
+
+const EDITOR_ATTRIBUTE = "data-paseo-keybindings-editor";
+const EDITOR_STYLE_ID = "paseo-keybindings-editor-style";
+
+export const editorOverlaySupported = Platform.OS === "web";
+
+/** Makes the textarea a transparent, non-wrapping layer over the highlighted text. */
+export function prepareEditorNode(node: unknown, colors: { caret: string; selection: string }): void {
+  if (!editorOverlaySupported || !node) return;
+  const el = node as DomEditorNode;
+  el.setAttribute(EDITOR_ATTRIBUTE, "");
+  el.setAttribute("wrap", "off");
+  el.setAttribute("spellcheck", "false");
+  el.style.whiteSpace = "pre";
+  el.style.overflow = "hidden";
+  el.style.resize = "none";
+  el.style.caretColor = colors.caret;
+  const css = `[${EDITOR_ATTRIBUTE}]::selection { background: ${colors.selection}; }`;
+  const existing = document.getElementById(EDITOR_STYLE_ID);
+  if (existing) {
+    existing.textContent = css;
+  } else {
+    const style = document.createElement("style");
+    style.id = EDITOR_STYLE_ID;
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+}
+
+export interface EditorKeyEvent {
+  key: string;
+  shift: boolean;
+  alt: boolean;
+  /** Ctrl or Cmd. */
+  mod: boolean;
+  value: string;
+  selectionStart: number;
+  selectionEnd: number;
+}
+export type EditorKeyResult = EditResult | "handled" | undefined;
+
+/** Routes keydown on the editor to `onKey`; an edit result is applied with undo support. */
+export function attachEditorKeys(node: unknown, onKey: (event: EditorKeyEvent) => EditorKeyResult): () => void {
+  if (!editorOverlaySupported || !node) return () => {};
+  const el = node as DomEditorNode;
+  const listener: KeydownListener = (event) => {
+    if (event.isComposing) return;
+    const result = onKey({
+      key: event.key,
+      shift: event.shiftKey,
+      alt: event.altKey,
+      mod: event.ctrlKey || event.metaKey,
+      value: el.value,
+      selectionStart: el.selectionStart ?? 0,
+      selectionEnd: el.selectionEnd ?? 0,
+    });
+    if (!result) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (result !== "handled") applyEditorEdit(el, result);
+  };
+  el.addEventListener("keydown", listener);
+  return () => el.removeEventListener("keydown", listener);
+}
+
+/**
+ * Applies an edit through execCommand so it lands on the undo stack and fires the input event
+ * React listens to. Returns false when the browser refused; the caller then sets the value.
+ */
+export function applyEditorEdit(node: unknown, edit: EditResult): boolean {
+  if (!editorOverlaySupported || !node) return false;
+  const el = node as DomEditorNode;
+  el.focus();
+  el.setSelectionRange(edit.start, edit.end);
+  let ok = true;
+  if (edit.insert) ok = document.execCommand("insertText", false, edit.insert);
+  else if (edit.start < edit.end) ok = document.execCommand("delete");
+  if (ok) el.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+  return ok;
+}
+
+export function focusEditorAt(node: unknown, start: number, end = start): void {
+  if (!node) return;
+  const el = node as DomEditorNode;
+  el.focus();
+  if (typeof el.setSelectionRange === "function") el.setSelectionRange(start, end);
 }

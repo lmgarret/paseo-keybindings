@@ -40,6 +40,18 @@ function tokenize(source: string): Token[] {
   return tokens;
 }
 
+/** Context names referenced by a clause, with their offsets in the clause. Ignores syntax errors. */
+export function whenIdentifiers(source: string): { name: string; start: number; end: number }[] {
+  const result: { name: string; start: number; end: number }[] = [];
+  const pattern = /[A-Za-z_][\w.]*/g;
+  for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
+    if (match[0] !== "true" && match[0] !== "false") {
+      result.push({ name: match[0], start: match.index, end: match.index + match[0].length });
+    }
+  }
+  return result;
+}
+
 /** Compiles a when clause. An empty or missing clause always matches. Throws on syntax errors. */
 export function compileWhen(source: string | undefined): WhenPredicate {
   if (source === undefined || source.trim() === "") return () => true;

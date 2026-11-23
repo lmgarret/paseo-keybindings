@@ -24,9 +24,30 @@ paseo plugin install /absolute/path/to/paseo-keybindings
 paseo plugin reload paseo-keybindings
 ```
 
-## Bindings
+## Editing bindings
 
-Bindings live in `client/defaults.ts` (no settings UI yet). Format:
+Your bindings live in `<paseo home>/keybindings.json` (`~/.paseo/keybindings.json` by default) on
+the daemon host, layered after the defaults in `client/defaults.ts`. Changes apply live, with no
+reload, whether they come from the UI or from another editor.
+
+Open them from the Command Center (Cmd/Ctrl+K):
+
+- **Preferences: Open Keyboard Shortcuts**: a table of every command with its keybinding, `when`,
+  and source (Default/User). Search by text or with **Record Keys**. Each row can be changed, added,
+  removed, reset, or shown in the JSON. The dialog records keys (press the combination, then Enter)
+  and checks the `when` clause as you type. Editing a default adds a user override plus a
+  `-command` entry that removes the default, as VS Code does. Also under Settings, Plugins.
+- **Preferences: Open Keyboard Shortcuts (JSON)**: an editor for `keybindings.json` with syntax
+  highlighting, line numbers, problems (syntax errors, invalid keys or `when` clauses, unknown
+  commands or contexts) with jump-to-line, completion for commands, contexts, and property names
+  (Ctrl+Space), Tab/Shift+Tab indent, auto-indent, Cmd/Ctrl+/ comments, Shift+Alt+F format (keeps
+  comments), Cmd/Ctrl+S save, and a commands/contexts reference that appends bindings. Saves are
+  compare-and-swap: if the file changed on disk, you choose which version to keep.
+
+The file is JSON with comments and trailing commas. Entries with errors are skipped and the rest
+still apply.
+
+## Binding format
 
 | Field     | Meaning                                                                                  |
 | --------- | ---------------------------------------------------------------------------------------- |
@@ -77,17 +98,29 @@ Input commands only act on a focused input and otherwise let the key through. Ed
 - Electron menu accelerators can consume some keys before the page sees them.
 - No `composerFocus` context: the composer has no stable DOM marker to target.
 - Single-stroke keys only (no `ctrl+k ctrl+c` chords).
+- The JSON editor is a plugin screen, not Paseo's file tab, which only opens workspace files. On
+  iOS/Android it is a plain text field (no highlighting, completion, or key recording).
+- The file lives on the daemon host, so each host has its own bindings.
 - `terminal.sendText` dispatches an `input` event to xterm's textarea; it relies on xterm internals.
 
 ## Development
 
 ```text
-index.client.tsx       contribute(): installs the listener, returns its cleanup
-client/web.ts          only DOM module: listener, contexts, commands (gated on Platform.OS === "web")
+index.client.tsx       listener, live user bindings, screens, Command Center items
+index.server.ts        keybindings.read / keybindings.write / keybindings.watch
+server/store.ts        file read, compare-and-swap write, directory watch
+shared/contracts.ts    RPC and subscription contracts
+client/web.ts          only DOM module: listener, contexts, commands, key recorder, editor helpers
+client/shortcuts-screen.tsx, binding-dialog.tsx   Keyboard Shortcuts table
+client/json-screen.tsx, code-editor.tsx           JSON editor
+client/jsonc.ts        JSONC tokenizer, parser with ranges, formatter
+client/user-bindings.ts  validation and comment-preserving edits of the user file
+client/table-model.ts  table rows and row actions
+client/completions.ts, editor-ops.ts, catalog.ts
 client/keys.ts         key string parsing, event normalization
 client/when.ts         when-clause compiler
 client/keybindings.ts  binding compilation and resolution
 client/text-motion.ts  word/line boundaries for inputs
 client/defaults.ts     default bindings
-test/                  vitest unit tests for the pure modules
+test/                  vitest unit tests (pure modules and the file store)
 ```
