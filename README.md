@@ -4,9 +4,18 @@
 
 <p align="center">VS Code-style, focus-aware keyboard shortcuts for the Paseo desktop and web app.</p>
 
-<p align="center">
-  <img src="assets/screenshots/keyboard-shortcuts.png" width="860" alt="Keyboard Shortcuts table listing Paseo shortcuts and a user Ctrl+C binding with a when clause">
-</p>
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="assets/screenshots/keyboard-shortcuts.png" alt="Keyboard Shortcuts table listing Paseo shortcuts and a user Ctrl+C binding with a when clause"><br>
+      <sub><b>Keyboard Shortcuts</b>: every command and Paseo shortcut, searchable, with a key recorder.</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="assets/screenshots/json-editor.png" alt="keybindings.json editor with syntax highlighting and the commands reference"><br>
+      <sub><b>keybindings.json</b>: JSON editor with validation, completion, and a commands reference.</sub>
+    </td>
+  </tr>
+</table>
 
 One `keybindings.json` of `{ key, command, when }` entries remaps both the plugin's commands (copy,
 paste, cursor movement, terminal keys) and Paseo's own actions (workspaces, panes, tabs, composer).
@@ -27,7 +36,7 @@ paseo plugin install github:lmgarret/paseo-keybindings
 Open the Command Center (Cmd/Ctrl+K) and type `key`:
 
 <p align="center">
-  <img src="assets/screenshots/command-center.png" width="560" alt="Command Center showing the two Preferences: Open Keyboard Shortcuts entries">
+  <img src="assets/screenshots/command-center.png" width="480" alt="Command Center showing the two Preferences: Open Keyboard Shortcuts entries">
 </p>
 
 - **Preferences: Open Keyboard Shortcuts**: a searchable table of every command and Paseo
