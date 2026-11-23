@@ -1,0 +1,8 @@
+{
+  "id": "paseo-keybindings",
+  "name": "VS Code-style keybindings",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.17.3"
+  }
+}
