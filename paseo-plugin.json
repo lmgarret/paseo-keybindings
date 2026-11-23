@@ -1,8 +1,9 @@
 {
   "id": "paseo-keybindings",
   "name": "Keybindings",
+  "description": "VS Code-style, focus-aware keyboard shortcuts for Paseo",
   "icon": "assets/icon.png",
-  "media": [],
+  "media": ["assets/screenshots/keyboard-shortcuts.png", "assets/screenshots/command-center.png"],
   "requirements": {
     "paseo": ">=0.17.3"
   }

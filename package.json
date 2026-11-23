@@ -1,14 +1,30 @@
 {
   "name": "paseo-keybindings",
   "private": true,
+  "description": "VS Code-style, focus-aware keyboard shortcuts for Paseo",
   "license": "MIT",
-  "version": "0.0.0",
+  "keywords": [
+    "paseo",
+    "paseo-plugin",
+    "keybindings",
+    "shortcuts",
+    "vscode"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lmgarret/paseo-keybindings.git"
+  },
+  "homepage": "https://github.com/lmgarret/paseo-keybindings#readme",
+  "bugs": {
+    "url": "https://github.com/lmgarret/paseo-keybindings/issues"
+  },
   "files": [
     "paseo-plugin.json",
     "OVERVIEW.md",
     "README.md",
-    "assets/icon.png",
-    "assets/icon.svg",
+    "LICENSE",
+    "assets/",
+    "docs/",
     "index.client.tsx",
     "index.server.ts",
     "client/",
@@ -30,6 +46,5 @@
     "typescript": "^5.9.3",
     "vitest": "^5.1.1",
     "zod": "^4.4.3"
-  },
-  "description": "Configurable, focus-aware keybindings for the Paseo app"
+  }
 }
