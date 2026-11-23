@@ -32,6 +32,8 @@ key are read-only here. A binding on a Paseo key shows **Overrides Paseo: …**,
 
 **Preferences: Open Keyboard Shortcuts (JSON)**, or **Open JSON** in the table.
 
+![keybindings.json editor](../assets/screenshots/json-editor.png)
+
 - Syntax highlighting and line numbers.
 - Problems list (syntax errors, invalid keys or `when` clauses, unknown commands or contexts) with
   jump-to-line.
