@@ -14,7 +14,8 @@ export interface EditResult {
 
 export const INDENT = "  ";
 
-const lineStartOf = (value: string, pos: number) => value.lastIndexOf("\n", pos - 1) + 1;
+// pos <= 0 short-circuits: lastIndexOf clamps a negative fromIndex to 0 and would match a leading "\n".
+const lineStartOf = (value: string, pos: number) => (pos <= 0 ? 0 : value.lastIndexOf("\n", pos - 1) + 1);
 const lineEndOf = (value: string, pos: number) => {
   const i = value.indexOf("\n", pos);
   return i === -1 ? value.length : i;
@@ -106,4 +107,61 @@ export function toggleLineComment(value: string, selStart: number, selEnd: numbe
     return x + shift;
   };
   return { start, end, insert: changed.join("\n"), selectionStart: map(selStart), selectionEnd: map(selEnd) };
+}
+
+// ---------------------------------------------------------------------------
+// VS Code line commands, also used by the keybinding commands on any focused input.
+
+/** editor.action.deleteLines: removes the covered lines; the caret keeps its column. */
+export function deleteLines(value: string, selStart: number, selEnd: number): EditResult {
+  const covered = coveredLines(value, selStart, selEnd);
+  let { start, end } = covered;
+  if (end < value.length) end += 1;
+  else if (start > 0) start -= 1;
+  const column = selStart - covered.start;
+  const rest = value.slice(0, start) + value.slice(end);
+  const lineAt = lineStartOf(rest, start);
+  const caret = Math.min(lineAt + column, lineEndOf(rest, lineAt));
+  return { start, end, insert: "", selectionStart: caret, selectionEnd: caret };
+}
+
+/** editor.action.copyLinesUp/DownAction: duplicates the covered lines; the selection follows the copy below. */
+export function copyLines(value: string, selStart: number, selEnd: number, direction: "up" | "down"): EditResult {
+  const { start, end } = coveredLines(value, selStart, selEnd);
+  const block = value.slice(start, end);
+  if (direction === "up") {
+    return { start, end: start, insert: `${block}\n`, selectionStart: selStart, selectionEnd: selEnd };
+  }
+  const shift = block.length + 1;
+  return { start: end, end, insert: `\n${block}`, selectionStart: selStart + shift, selectionEnd: selEnd + shift };
+}
+
+/** editor.action.moveLinesUp/DownAction: swaps the covered lines with the neighbor line. Null at the edge. */
+export function moveLines(value: string, selStart: number, selEnd: number, direction: "up" | "down"): EditResult | null {
+  const { start, end } = coveredLines(value, selStart, selEnd);
+  const block = value.slice(start, end);
+  if (direction === "up") {
+    if (start === 0) return null;
+    const prevStart = lineStartOf(value, start - 1);
+    const prev = value.slice(prevStart, start - 1);
+    const shift = -(prev.length + 1);
+    return {
+      start: prevStart,
+      end,
+      insert: `${block}\n${prev}`,
+      selectionStart: selStart + shift,
+      selectionEnd: selEnd + shift,
+    };
+  }
+  if (end === value.length) return null;
+  const nextEnd = lineEndOf(value, end + 1);
+  const next = value.slice(end + 1, nextEnd);
+  const shift = next.length + 1;
+  return {
+    start,
+    end: nextEnd,
+    insert: `${next}\n${block}`,
+    selectionStart: selStart + shift,
+    selectionEnd: selEnd + shift,
+  };
 }

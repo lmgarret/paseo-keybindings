@@ -41,3 +41,10 @@ describe("line motion", () => {
     expect(lineEnd(text, 16)).toBe(text.length);
   });
 });
+
+describe("lineStart at the edges", () => {
+  it("does not skip a leading newline at position 0", () => {
+    expect(lineStart("\nabc", 0)).toBe(0);
+    expect(lineStart("\nabc", 1)).toBe(1);
+  });
+});

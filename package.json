@@ -17,7 +17,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "native:extract": "node scripts/extract-native-shortcuts.mjs > client/native-shortcuts.ts"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.17.3",

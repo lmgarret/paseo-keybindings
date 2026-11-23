@@ -38,6 +38,9 @@ export interface UserKeybindings {
 
 const KNOWN_PROPERTIES = new Set(["key", "command", "when", "args"]);
 
+const ARG_HINTS: Record<string, string> = { text: '"..."', index: "1-9", delta: "-1 or 1" };
+const describeArg = (name: string) => `"${name}": ${ARG_HINTS[name] ?? "..."}`;
+
 export function analyzeUserKeybindings(text: string): UserKeybindings {
   const parsed = parse(text);
   const diagnostics: Diagnostic[] = [];
@@ -119,12 +122,15 @@ export function analyzeUserKeybindings(text: string): UserKeybindings {
     }
 
     const args = props.get("args");
-    if (
-      command?.value.type === "string" &&
-      command.value.value === "terminal.sendText" &&
-      (args?.value.type !== "object" || !args.value.properties.some((p) => p.key === "text" && p.value.type === "string"))
-    ) {
-      warn((args ?? command).value.start, (args ?? command).value.end, 'terminal.sendText needs args { "text": "..." }');
+    const template = command?.value.type === "string" ? commandInfo(command.value.value)?.args : undefined;
+    if (template) {
+      const given = args?.value.type === "object" ? new Map(args.value.properties.map((p) => [p.key, p.value.type])) : undefined;
+      const ok = Object.entries(template).every(([name, sample]) => given?.get(name) === typeof sample);
+      if (!ok) {
+        const id = (command!.value as { value: string }).value;
+        const at = (args ?? command!).value;
+        warn(at.start, at.end, `${id} needs args { ${Object.keys(template).map(describeArg).join(", ")} }`);
+      }
     }
 
     if (diagnostics.slice(errorCount).some((d) => d.severity === "error")) return;

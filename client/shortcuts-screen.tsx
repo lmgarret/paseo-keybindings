@@ -20,7 +20,7 @@ import {
 import { Banner, Button, KeyCaps, MONO, withAlpha } from "./ui-common";
 import { useKeybindingsFile } from "./use-keybindings-file";
 import { analyzeUserKeybindings, type TextEdit } from "./user-bindings";
-import { canRecordKeys, recordKeys } from "./web";
+import { appPlatform, canRecordKeys, readPaseoOverrides, recordKeys } from "./web";
 
 export interface ShortcutsNavigation {
   openJson(entry?: number): void;
@@ -53,6 +53,7 @@ function RowActions({
     show ? (
       <Button key={label} theme={theme} icon={icon} variant="ghost" accessibilityLabel={label} disabled={disabled} onPress={onPress} />
     ) : null;
+  if (row.readOnly) return null;
   return (
     <View style={{ flexDirection: "row", gap: 2 }}>
       {action("Pencil", `Change keybinding for ${row.title}`, onEdit, row.source !== "unbound")}
@@ -79,7 +80,12 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
 
     const text = file?.text ?? "";
     const user = useMemo(() => analyzeUserKeybindings(text), [text]);
-    const rows = useMemo(() => buildRows(DEFAULT_KEYBINDINGS, user), [user]);
+    // Paseo's bindings with the rebinds saved in its settings; read once per visit of the screen.
+    const paseo = useMemo(() => {
+      const platform = appPlatform();
+      return platform ? { platform, overrides: readPaseoOverrides() } : undefined;
+    }, []);
+    const rows = useMemo(() => buildRows(DEFAULT_KEYBINDINGS, user, paseo), [user, paseo]);
     const visible = useMemo(() => filterRows(rows, query, recordedKey), [rows, query, recordedKey]);
     const errorCount = user.diagnostics.filter((d) => d.severity === "error").length;
     const readOnly = !file || !user.editable || saving;
@@ -134,19 +140,44 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
           onShowJson={() => navigation.openJson(row.entryIndex)}
         />
       );
-      const key = row.key ? <KeyCaps theme={theme} value={row.key} /> : <Text style={muted}>—</Text>;
-      const conflicts =
-        row.conflicts > 0 ? (
-          <Text style={{ color: c.statusWarning, fontSize: 11 }}>
-            {row.conflicts} other binding{row.conflicts > 1 ? "s" : ""}
-          </Text>
-        ) : null;
-      const source = (
-        <Text style={[muted, { color: row.source === "user" ? c.accent : c.foregroundMuted }]}>
-          {row.source === "user" ? "User" : row.source === "default" ? "Default" : ""}
-        </Text>
+      const isPaseo = row.source === "paseo";
+      const key = row.key ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <KeyCaps theme={theme} value={row.key} />
+          {row.digits ? <Text style={muted}>… 9</Text> : null}
+        </View>
+      ) : (
+        <Text style={muted}>—</Text>
       );
-      const onPress = () => !readOnly && setDialog({ mode: row.source === "unbound" ? "add" : "edit", row });
+      const warning = { color: c.statusWarning, fontSize: 11 };
+      const conflicts = isPaseo ? (
+        row.conflicts > 0 ? (
+          <Text style={warning}>
+            Overridden by {row.conflicts} binding{row.conflicts > 1 ? "s" : ""}
+          </Text>
+        ) : null
+      ) : (
+        <>
+          {row.conflicts > 0 ? (
+            <Text style={warning}>
+              {row.conflicts} other binding{row.conflicts > 1 ? "s" : ""}
+            </Text>
+          ) : null}
+          {row.shadows.length > 0 ? (
+            <Text style={warning} numberOfLines={2}>
+              Overrides Paseo: {row.shadows.join(", ")}
+            </Text>
+          ) : null}
+        </>
+      );
+      const sourceLabel = { user: "User", default: "Default", paseo: "Paseo", unbound: "" }[row.source];
+      const source = <Text style={[muted, { color: row.source === "user" ? c.accent : c.foregroundMuted }]}>{sourceLabel}</Text>;
+      const condition = row.when ?? row.note ?? "";
+      const conditionStyle = row.note && !row.when ? { fontStyle: "italic" as const } : { fontFamily: MONO };
+      const onPress = () => {
+        if (row.readOnly) toast.show(row.readOnly);
+        else if (!readOnly) setDialog({ mode: row.source === "unbound" ? "add" : "edit", row });
+      };
 
       if (compact) {
         return (
@@ -166,6 +197,7 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
               {conflicts}
             </View>
             {row.when ? <Text style={[muted, { fontFamily: MONO }]}>when {row.when}</Text> : null}
+            {row.note ? <Text style={[muted, conditionStyle]}>{row.note}</Text> : null}
             {actions}
           </Pressable>
         );
@@ -199,8 +231,8 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
             {key}
             {conflicts}
           </View>
-          <Text style={[muted, { flex: 3, fontFamily: MONO }]} numberOfLines={2}>
-            {row.when ?? ""}
+          <Text style={[muted, { flex: 3 }, conditionStyle]} numberOfLines={2}>
+            {condition}
           </Text>
           <View style={{ width: 60 }}>{source}</View>
           <View style={{ width: 150, alignItems: "flex-end" }}>{actions}</View>

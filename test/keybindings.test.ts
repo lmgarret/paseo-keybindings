@@ -94,9 +94,37 @@ describe("matchKeybindings / dispatchKeybinding", () => {
 
   it("passes args to the command", () => {
     const run = vi.fn(() => true);
-    const withArgs = compileKeybindings([{ key: "ctrl+c", command: "terminal.sendText", args: { text: "\u0003" } }]);
-    dispatchKeybinding(withArgs, ctrlC, {}, { "terminal.sendText": run });
-    expect(run).toHaveBeenCalledWith({ text: "\u0003" });
+    const withArgs = compileKeybindings([{ key: "ctrl+c", command: "terminal.sendSequence", args: { text: "\u0003" } }]);
+    dispatchKeybinding(withArgs, ctrlC, {}, { "terminal.sendSequence": run });
+    expect(run).toHaveBeenCalledWith({ text: "\u0003" }, ctrlC);
+  });
+});
+
+describe("command aliases", () => {
+  it("runs VS Code and legacy ids as the catalog command", () => {
+    const run = vi.fn(() => true);
+    const commands = { "terminal.sendSequence": run, "cursor.wordLeft": run };
+    for (const command of ["terminal.sendText", "workbench.action.terminal.sendSequence", "cursorWordLeft"]) {
+      run.mockClear();
+      const compiled = compileKeybindings([{ key: "ctrl+c", command, args: { text: "x" } }]);
+      expect(compiled[0].command).not.toBe(command);
+      expect(dispatchKeybinding(compiled, ctrlC, {}, commands)).toBe(true);
+      expect(run).toHaveBeenCalledOnce();
+    }
+  });
+
+  it("lets a removal name either id", () => {
+    const compiled = compileKeybindings([
+      { key: "ctrl+c", command: "editor.copy" },
+      { key: "ctrl+c", command: "-editor.action.clipboardCopyAction" },
+      { key: "ctrl+x", command: "editor.action.clipboardCutAction" },
+      { key: "ctrl+x", command: "-editor.cut" },
+    ]);
+    expect(compiled).toEqual([]);
+  });
+
+  it("leaves unknown ids alone", () => {
+    expect(compileKeybindings([{ key: "ctrl+c", command: "my.command" }])[0].command).toBe("my.command");
   });
 });
 
@@ -106,3 +134,83 @@ describe("DEFAULT_KEYBINDINGS", () => {
     expect(DEFAULT_KEYBINDINGS).toEqual([]);
   });
 });
+
+describe("results and external removals", () => {
+  it("returns the first non-declining result, including release", () => {
+    const compiled = compileKeybindings([
+      { key: "ctrl+c", command: "a" },
+      { key: "ctrl+c", command: "b" },
+    ]);
+    expect(dispatchKeybinding(compiled, ctrlC, {}, { a: () => "release", b: () => false })).toBe("release");
+    expect(dispatchKeybinding(compiled, ctrlC, {}, { a: () => true, b: () => false })).toBe(true);
+    expect(dispatchKeybinding(compiled, ctrlC, {}, { a: () => false, b: () => false })).toBe(false);
+  });
+
+  it("keeps removals of external commands as -<id> entries, in order", () => {
+    const external = (command: string) => command === "workspace.new";
+    const compiled = compileKeybindings(
+      [
+        { key: "meta+n", command: "workspace.new" },
+        { key: "meta+n", command: "-workspace.new" },
+        { key: "meta+n", command: "-editor.copy" },
+      ],
+      undefined,
+      { isExternal: external },
+    );
+    expect(compiled.map((c) => c.command)).toEqual(["-workspace.new"]);
+    const release = vi.fn(() => "release" as const);
+    expect(dispatchKeybinding(compiled, parseChord("meta+n"), {}, { "-workspace.new": release })).toBe("release");
+    expect(release).toHaveBeenCalledWith(undefined, parseChord("meta+n"));
+  });
+});
+
+describe("removals, VS Code style", () => {
+  const metaB = parseChord("meta+b");
+  const external = (command: string) => command === "sidebar.toggle.left";
+
+  it("remove defaults only, never the user's own bindings", () => {
+    const compiled = compileKeybindings(
+      [
+        { key: "ctrl+c", command: "editor.copy" },
+        { key: "ctrl+x", command: "editor.cut" },
+        { key: "ctrl+c", command: "-editor.copy" },
+        { key: "ctrl+x", command: "-editor.cut" },
+      ],
+      undefined,
+      { defaultCount: 1 },
+    );
+    expect(compiled.map((c) => c.command)).toEqual(["editor.cut"]);
+  });
+
+  it("let a user binding win over a kept Paseo removal on the same key (Cmd+B → Cmd+J → Cmd+B)", () => {
+    const compiled = compileKeybindings(
+      [
+        { key: "meta+b", command: "sidebar.toggle.left" },
+        { key: "meta+b", command: "-sidebar.toggle.left" },
+      ],
+      undefined,
+      { defaultCount: 0, isExternal: external },
+    );
+    const run = vi.fn(() => true);
+    const release = vi.fn(() => "release" as const);
+    const commands = { "sidebar.toggle.left": run, "-sidebar.toggle.left": release };
+    expect(dispatchKeybinding(compiled, metaB, {}, commands)).toBe(true);
+    expect(run).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it("apply a kept Paseo removal when no binding takes the key", () => {
+    const compiled = compileKeybindings(
+      [
+        { key: "meta+b", command: "-sidebar.toggle.left" },
+        { key: "meta+b", command: "editor.copy", when: "hasSelection" },
+      ],
+      undefined,
+      { defaultCount: 0, isExternal: external },
+    );
+    const commands = { "editor.copy": () => true, "-sidebar.toggle.left": () => "release" as const };
+    expect(dispatchKeybinding(compiled, metaB, { hasSelection: true }, commands)).toBe(true);
+    expect(dispatchKeybinding(compiled, metaB, {}, commands)).toBe("release");
+  });
+});
+

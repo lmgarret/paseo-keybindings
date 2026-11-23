@@ -3,7 +3,7 @@ import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { KeybindingsFile } from "../shared/contracts";
-import { COMMAND_CATALOG, CONTEXT_CATALOG } from "./catalog";
+import { ALL_COMMANDS, CONTEXT_CATALOG } from "./catalog";
 import { CodeEditor, type CodeEditorHandle } from "./code-editor";
 import { format, lineColumnAt } from "./jsonc";
 import { Banner, Button, MONO } from "./ui-common";
@@ -219,12 +219,12 @@ export function createJsonScreen(navigation: JsonNavigation) {
               <ScrollView contentContainerStyle={{ padding: 12, gap: 6 }}>
                 <Text style={sectionTitle}>Commands</Text>
                 <Text style={muted}>Press to append a binding.</Text>
-                {COMMAND_CATALOG.map((command) => (
+                {ALL_COMMANDS.map((command) => (
                   <Pressable
                     key={command.id}
                     accessibilityRole="button"
                     accessibilityLabel={`Add a binding for ${command.title}`}
-                    onPress={() => insertCommand(command.id, "args" in command ? { ...command.args } : undefined)}
+                    onPress={() => insertCommand(command.id, command.args ? { ...command.args } : undefined)}
                     style={({ pressed }) => ({ paddingVertical: 4, opacity: pressed ? 0.6 : 1 })}
                   >
                     <Text style={{ color: c.foreground, fontSize: 13 }}>{command.title}</Text>

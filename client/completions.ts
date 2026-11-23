@@ -1,5 +1,5 @@
 // IntelliSense-style suggestions for keybindings.json at a caret offset. Pure module (no DOM).
-import { COMMAND_CATALOG, CONTEXT_CATALOG } from "./catalog";
+import { ALL_COMMANDS, CONTEXT_CATALOG } from "./catalog";
 import { isTrivia, type Token, tokenize } from "./jsonc";
 
 export interface CompletionItem {
@@ -71,7 +71,7 @@ export function completionsAt(text: string, offset: number): Completions | null 
   const property = keyToken.text.slice(1, -1);
 
   if (property === "command") {
-    const items = COMMAND_CATALOG.flatMap((c) => [
+    const items = ALL_COMMANDS.flatMap((c) => [
       { label: c.id, detail: c.title, insert: c.id },
       { label: `-${c.id}`, detail: `Remove a default ${c.title} binding`, insert: `-${c.id}` },
     ]);

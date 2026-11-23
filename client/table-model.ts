@@ -1,7 +1,9 @@
 // Rows of the Keyboard Shortcuts table and the file edits behind each row action. Pure module.
-import { COMMAND_CATALOG, commandInfo } from "./catalog";
+import { ALL_COMMANDS, canonicalCommand, commandInfo } from "./catalog";
 import type { Keybinding } from "./keybindings";
 import { chordsEqual, formatChord, parseChord } from "./keys";
+import { NATIVE_SHORTCUTS, type NativeShortcut } from "./native-shortcuts";
+import { type AppPlatform, formatStroke, type PaseoOverrides, platformBindings } from "./paseo-actions";
 import {
   analyzeUserKeybindings,
   appendBinding,
@@ -11,19 +13,31 @@ import {
   type UserKeybindings,
 } from "./user-bindings";
 
+export type { AppPlatform } from "./paseo-actions";
+
 export interface ShortcutRow {
   id: string;
+  /** Command id (aliases resolved). */
   command: string;
   title: string;
-  /** Normalized key ("" when unbound). */
+  /** Normalized key ("" when unbound). For `digits` rows, the "1" variant. */
   key: string;
+  /** The key's last part is a digit and the row covers 1 through 9. */
+  digits?: boolean;
   when?: string;
+  /** Conditions or state in words ("paseo" rows, whose conditions are not when clauses). */
+  note?: string;
   args?: unknown;
-  source: "default" | "user" | "unbound";
+  /** "paseo": one of Paseo's built-in bindings, with the user's rebinds from Paseo's settings applied. */
+  source: "default" | "user" | "unbound" | "paseo";
   /** Index in the user file for user rows. */
   entryIndex?: number;
-  /** Other active rows with the same key. */
+  /** Set when the row cannot be changed here (digit ranges and multi-stroke Paseo keys). */
+  readOnly?: string;
+  /** Plugin rows: other plugin rows with the same key. Paseo rows: plugin rows that take its key. */
   conflicts: number;
+  /** Plugin rows: Paseo shortcuts on the same key, which this binding overrides when it runs. */
+  shadows: string[];
 }
 
 const normalize = (key: string) => {
@@ -42,105 +56,230 @@ const sameKey = (a: string, b: string) => {
   }
 };
 
-/** True when a user "-command" entry removes this default binding. */
+/** Every key a row answers to (digit rows cover 1 through 9). */
+export function rowKeys(row: Pick<ShortcutRow, "key" | "digits">): string[] {
+  if (!row.key) return [];
+  if (!row.digits) return [row.key];
+  const base = row.key.slice(0, -1);
+  return ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => base + d);
+}
+
+/** Title for a binding: Paseo's label when its args pick one Paseo binding ("Next workspace"). */
+function titleFor(command: string, args: unknown, shortcuts: readonly NativeShortcut[]): string {
+  const id = canonicalCommand(command);
+  const given = (args ?? {}) as Record<string, unknown>;
+  const native = shortcuts.find(
+    (s) => s.command === id && s.args && Object.entries(s.args).every(([k, v]) => given[k] === v),
+  );
+  const index = typeof given.index === "number" ? ` ${given.index}` : "";
+  return (native?.label ?? commandInfo(command)?.title ?? command) + index;
+}
+
+/** Paseo's bindings on this platform as rows, with the user's Paseo rebinds applied. */
+export function nativeRows(platform: AppPlatform, overrides: PaseoOverrides = {}, shortcuts?: readonly NativeShortcut[]): ShortcutRow[] {
+  return platformBindings(platform, overrides, shortcuts).map(({ shortcut, strokes, rebound }) => {
+    const notes = [shortcut.note, strokes === null ? "unassigned in Paseo" : rebound ? "rebound in Paseo" : undefined];
+    const last = strokes?.[strokes.length - 1];
+    const row: ShortcutRow = {
+      id: `paseo-${shortcut.id}`,
+      command: shortcut.command,
+      title: shortcut.label,
+      key: strokes ? strokes.map(formatStroke).join(" ") : "",
+      note: notes.filter(Boolean).join("; ") || undefined,
+      source: "paseo",
+      conflicts: 0,
+      shadows: [],
+    };
+    if (shortcut.args) row.args = { ...shortcut.args };
+    if (last?.digits) {
+      row.digits = true;
+      row.readOnly = "Covers keys 1 to 9: change it in Paseo's Settings → Shortcuts";
+    } else if (strokes && strokes.length > 1) {
+      row.readOnly = "A multi-stroke key: change it in Paseo's Settings → Shortcuts";
+    }
+    return row;
+  });
+}
+
+/** True when a user "-command" entry removes this default (or Paseo) binding. */
 export function isDefaultRemoved(binding: Keybinding, userBindings: readonly Keybinding[]): boolean {
+  const command = canonicalCommand(binding.command);
   return userBindings.some(
     (u) =>
-      u.command === `-${binding.command}` &&
+      u.command.startsWith("-") &&
+      canonicalCommand(u.command.slice(1)) === command &&
       sameKey(u.key, binding.key) &&
       (u.when === undefined || u.when === binding.when),
   );
 }
 
-export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings): ShortcutRow[] {
-  const rows: ShortcutRow[] = [];
+export interface PaseoContext {
+  platform: AppPlatform;
+  overrides?: PaseoOverrides;
+  /** Defaults to the generated table; tests pass their own. */
+  shortcuts?: readonly NativeShortcut[];
+}
+
+/**
+ * Rows of the table: defaults, user entries, Paseo's bindings (when `paseo` is given), and every
+ * command that has no binding, sorted by title.
+ */
+export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings, paseo?: PaseoContext): ShortcutRow[] {
+  const shortcuts = paseo?.shortcuts ?? NATIVE_SHORTCUTS;
+  const plugin: ShortcutRow[] = [];
   defaults.forEach((binding, i) => {
     if (isDefaultRemoved(binding, user.bindings)) return;
-    rows.push({
+    plugin.push({
       id: `default-${i}`,
-      command: binding.command,
-      title: commandInfo(binding.command)?.title ?? binding.command,
+      command: canonicalCommand(binding.command),
+      title: titleFor(binding.command, binding.args, shortcuts),
       key: normalize(binding.key),
       when: binding.when,
       args: binding.args,
       source: "default",
       conflicts: 0,
+      shadows: [],
     });
   });
   for (const entry of user.entries) {
     const binding = entry.binding;
     if (!binding || binding.command.startsWith("-")) continue;
-    rows.push({
+    plugin.push({
       id: `user-${entry.index}`,
-      command: binding.command,
-      title: commandInfo(binding.command)?.title ?? binding.command,
+      command: canonicalCommand(binding.command),
+      title: titleFor(binding.command, binding.args, shortcuts),
       key: normalize(binding.key),
       when: binding.when,
       args: binding.args,
       source: "user",
       entryIndex: entry.index,
       conflicts: 0,
+      shadows: [],
     });
   }
-  const bound = new Set(rows.map((row) => row.command));
-  for (const command of COMMAND_CATALOG) {
-    if (!bound.has(command.id)) {
-      rows.push({ id: `unbound-${command.id}`, command: command.id, title: command.title, key: "", source: "unbound", conflicts: 0 });
+  for (const row of plugin) {
+    if (row.key) row.conflicts = plugin.filter((other) => other !== row && other.key === row.key).length;
+  }
+
+  // A Paseo row is hidden when the user removed it, or binds the same command to the same key.
+  const native = paseo
+    ? nativeRows(paseo.platform, paseo.overrides, shortcuts).filter(
+        (row) =>
+          !row.key ||
+          !(
+            isDefaultRemoved({ key: row.key, command: row.command }, user.bindings) ||
+            plugin.some((p) => p.command === row.command && p.key === row.key && !p.when)
+          ),
+      )
+    : [];
+  for (const nativeRow of native) {
+    const keys = rowKeys(nativeRow);
+    for (const row of plugin) {
+      if (!row.key || row.command === nativeRow.command || !keys.includes(row.key)) continue;
+      nativeRow.conflicts++;
+      if (!row.shadows.includes(nativeRow.title)) row.shadows.push(nativeRow.title);
     }
   }
-  for (const row of rows) {
-    if (row.key) row.conflicts = rows.filter((other) => other !== row && other.key === row.key).length;
+
+  const rows = [...plugin, ...native];
+  const listed = new Set(rows.map((row) => row.command));
+  for (const command of ALL_COMMANDS) {
+    if (listed.has(command.id)) continue;
+    // Without a platform we cannot tell whether Paseo has a key for it, so say nothing.
+    const note = paseo && command.paseo && !command.plugin ? "Paseo has no key for this here, so it cannot run" : undefined;
+    rows.push({
+      id: `unbound-${command.id}`,
+      command: command.id,
+      title: command.title,
+      key: "",
+      note,
+      source: "unbound",
+      conflicts: 0,
+      shadows: [],
+    });
   }
-  const order = { user: 0, default: 1, unbound: 2 };
+  const order = { user: 0, default: 1, paseo: 2, unbound: 3 };
   return rows.sort((a, b) => a.title.localeCompare(b.title) || order[a.source] - order[b.source]);
 }
 
 /** Filters by free text, or by exact key when `recordedKey` is set ("Record Keys"). */
 export function filterRows(rows: readonly ShortcutRow[], query: string, recordedKey?: string): ShortcutRow[] {
-  if (recordedKey) return rows.filter((row) => row.key === recordedKey);
+  if (recordedKey) return rows.filter((row) => rowKeys(row).includes(recordedKey));
   const q = query.trim().toLowerCase();
   if (!q) return [...rows];
   return rows.filter((row) =>
-    [row.title, row.command, row.key, row.when ?? "", row.source].some((field) => field.toLowerCase().includes(q)),
+    [row.title, row.command, row.key, row.when ?? "", row.note ?? "", row.source].some((field) =>
+      field.toLowerCase().includes(q),
+    ),
   );
 }
 
 // ---------------------------------------------------------------------------
 // Row actions → edits of the user file
 
-/** Changes a row's key/when/args. Default rows get a user override plus a removal of the default. */
+/**
+ * Changes a row's key/when/args. Default and Paseo rows get a user binding plus a "-command" entry
+ * that removes the old key (for Paseo rows, the plugin then keeps that key from Paseo).
+ */
 export function editRow(text: string, user: UserKeybindings, row: ShortcutRow, next: Keybinding): TextEdit {
   if (row.source === "user" && row.entryIndex !== undefined) {
-    return replaceBinding(text, user.entries[row.entryIndex], next);
+    return dropRedundantRemovals(replaceBinding(text, user.entries[row.entryIndex], next), next);
   }
+  const unchanged =
+    row.key && sameKey(next.key, row.key) && next.when === row.when && JSON.stringify(next.args) === JSON.stringify(row.args);
+  if ((row.source === "default" || row.source === "paseo") && unchanged) return { text };
   let edit = appendBinding(text, user, next);
-  if (row.source === "default") {
-    const removal: Keybinding = { key: row.key, command: `-${row.command}` };
-    if (row.when !== undefined) removal.when = row.when;
-    edit = { ...appendBinding(edit.text, analyzeUserKeybindings(edit.text), removal), range: edit.range };
+  if ((row.source === "default" || row.source === "paseo") && row.key) {
+    edit = { ...appendBinding(edit.text, analyzeUserKeybindings(edit.text), removalFor(row)), range: edit.range };
   }
   return edit;
 }
 
 export function addBinding(text: string, user: UserKeybindings, next: Keybinding): TextEdit {
-  return appendBinding(text, user, next);
+  return dropRedundantRemovals(appendBinding(text, user, next), next);
 }
 
-/** Removes a user row, or disables a default row with a "-command" entry. */
+/**
+ * Drops "-command" entries for the key a binding now uses for the same command (left over from an
+ * earlier change away from that key), so the file says what the table shows.
+ */
+function dropRedundantRemovals(edit: TextEdit, binding: Keybinding): TextEdit {
+  const command = canonicalCommand(binding.command);
+  let current = edit;
+  for (;;) {
+    const user = analyzeUserKeybindings(current.text);
+    const stale = user.entries.find(
+      (entry) =>
+        entry.binding?.command.startsWith("-") &&
+        canonicalCommand(entry.binding.command.slice(1)) === command &&
+        entry.binding.when === undefined &&
+        sameKey(entry.binding.key, binding.key),
+    );
+    if (!stale) return current;
+    const text = removeBinding(current.text, user, stale.index).text;
+    // Keep the range on the edited entry when the removal came before it.
+    const shift = current.range && stale.start < current.range.start ? current.text.length - text.length : 0;
+    current = { text, range: current.range && { start: current.range.start - shift, end: current.range.end - shift } };
+  }
+}
+
+function removalFor(row: ShortcutRow): Keybinding {
+  const removal: Keybinding = { key: row.key, command: `-${row.command}` };
+  if (row.when !== undefined) removal.when = row.when;
+  return removal;
+}
+
+/** Removes a user row, or disables a default or Paseo row with a "-command" entry. */
 export function removeRow(text: string, user: UserKeybindings, row: ShortcutRow): TextEdit {
   if (row.source === "user" && row.entryIndex !== undefined) return removeBinding(text, user, row.entryIndex);
-  if (row.source === "default") {
-    const removal: Keybinding = { key: row.key, command: `-${row.command}` };
-    if (row.when !== undefined) removal.when = row.when;
-    return appendBinding(text, user, removal);
-  }
+  if ((row.source === "default" || row.source === "paseo") && row.key) return appendBinding(text, user, removalFor(row));
   return { text };
 }
 
 /** Removes every user entry for a command (including removals), restoring its defaults. */
 export function resetCommand(text: string, user: UserKeybindings, command: string): TextEdit {
   const indices = user.entries
-    .filter((entry) => entry.binding && entry.binding.command.replace(/^-/, "") === command)
+    .filter((entry) => entry.binding && canonicalCommand(entry.binding.command.replace(/^-/, "")) === command)
     .map((entry) => entry.index)
     .sort((a, b) => b - a);
   let current = text;
@@ -151,5 +290,5 @@ export function resetCommand(text: string, user: UserKeybindings, command: strin
 }
 
 export function hasUserEntries(user: UserKeybindings, command: string): boolean {
-  return user.entries.some((entry) => entry.binding?.command.replace(/^-/, "") === command);
+  return user.entries.some((entry) => !!entry.binding && canonicalCommand(entry.binding.command.replace(/^-/, "")) === command);
 }

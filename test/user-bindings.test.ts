@@ -121,4 +121,26 @@ describe("edits", () => {
     const single = `[\n  { "key": "a", "command": "editor.copy" }\n]\n`;
     expect(removeBinding(single, analyzeUserKeybindings(single), 0).text).toBe("[\n]\n");
   });
+
+  it("accepts VS Code command ids and checks text args of any command taking them", () => {
+    const text = `[
+      { "key": "ctrl+shift+k", "command": "editor.action.deleteLines" },
+      { "key": "ctrl+j", "command": "type" },
+      { "key": "ctrl+t", "command": "editor.type", "args": { "text": "hi" } }
+    ]`;
+    const messages = analyzeUserKeybindings(text).diagnostics.map((d) => d.message);
+    expect(messages).toEqual(['type needs args { "text": "..." }']);
+  });
+
+  it("knows Paseo's commands and their args", () => {
+    const text = `[
+      { "key": "cmd+d", "command": "workspace.pane.split.right" },
+      { "key": "cmd+\\\\", "command": "-workspace.pane.split.right" },
+      { "key": "ctrl+1", "command": "workspace.navigate.index" },
+      { "key": "ctrl+tab", "command": "workspace.tab.navigate.relative", "args": { "delta": 1 } }
+    ]`;
+    const messages = analyzeUserKeybindings(text).diagnostics.map((d) => d.message);
+    expect(messages).toEqual(['workspace.navigate.index needs args { "index": 1-9 }']);
+  });
 });
+

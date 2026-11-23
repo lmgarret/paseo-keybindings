@@ -23,7 +23,7 @@ describe("completionsAt", () => {
 
   it("completes the context identifier under the caret in when", () => {
     const { text, result } = at(`[{ "when": "!terminalFocus && has|Sel" }]`);
-    expect(result!.items.map((i) => i.label)).toEqual(["hasSelection"]);
+    expect(result!.items.map((i) => i.label)).toEqual(["hasSelection", "editorHasSelection"]);
     expect(text.slice(result!.from, result!.to)).toBe("hasSel");
   });
 

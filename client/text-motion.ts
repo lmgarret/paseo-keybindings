@@ -29,7 +29,8 @@ export function wordEndAfter(value: string, pos: number): number {
 }
 
 export function lineStart(value: string, pos: number): number {
-  return value.lastIndexOf("\n", Math.max(pos - 1, -1)) + 1;
+  // lastIndexOf clamps a negative fromIndex to 0 and would match a leading "\n".
+  return pos <= 0 ? 0 : value.lastIndexOf("\n", pos - 1) + 1;
 }
 
 export function lineEnd(value: string, pos: number): number {

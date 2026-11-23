@@ -17,7 +17,7 @@ export default function contribute(client: PluginClientContext) {
     Platform.OS === "web"
       ? client.subscribe(watchKeybindingsFile, {}, (file) => {
           const user = analyzeUserKeybindings(file.text);
-          controller.setBindings([...DEFAULT_KEYBINDINGS, ...user.bindings]);
+          controller.setBindings(user.bindings);
           const errors = user.diagnostics.filter((d) => d.severity === "error");
           if (errors.length) console.warn(`[keybindings] ${file.path}: ${errors.length} error(s); invalid entries ignored`);
         })
