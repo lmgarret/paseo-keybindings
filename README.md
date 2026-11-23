@@ -3,11 +3,15 @@
 A Paseo plugin that remaps keyboard shortcuts in the desktop/web app, VS Code style: a list of
 `{ key, command, when, args }` bindings evaluated by one capture-phase `keydown` listener.
 
-The default binding fixes Ctrl+C on macOS when Karabiner-Elements emulates Windows/Linux shortcuts
+No bindings ship by default: until you add some to `keybindings.json`, every key behaves as before.
+
+Example: terminal-aware Ctrl+C on macOS when Karabiner-Elements emulates Windows/Linux shortcuts
 but leaves raw Ctrl+C to Paseo for the terminal:
 
 ```json
-{ "key": "ctrl+c", "command": "editor.copy", "when": "!terminalFocus && hasSelection" }
+[
+  { "key": "ctrl+c", "command": "editor.copy", "when": "!terminalFocus && hasSelection" }
+]
 ```
 
 - Text selected in chat, the composer, or agent output: Ctrl+C copies it.
@@ -27,7 +31,7 @@ paseo plugin reload paseo-keybindings
 ## Editing bindings
 
 Your bindings live in `<paseo home>/keybindings.json` (`~/.paseo/keybindings.json` by default) on
-the daemon host, layered after the defaults in `client/defaults.ts`. Changes apply live, with no
+the daemon host, layered after the code defaults in `client/defaults.ts` (empty). Changes apply live, with no
 reload, whether they come from the UI or from another editor.
 
 Open them from the Command Center (Cmd/Ctrl+K):

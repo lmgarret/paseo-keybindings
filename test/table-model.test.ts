@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_KEYBINDINGS } from "../client/defaults";
+import type { Keybinding } from "../client/keybindings";
 import { addBinding, buildRows, editRow, filterRows, removeRow, resetCommand } from "../client/table-model";
 import { analyzeUserKeybindings } from "../client/user-bindings";
 
-const rowsFor = (text: string) => buildRows(DEFAULT_KEYBINDINGS, analyzeUserKeybindings(text));
+const DEFAULTS: Keybinding[] = [{ key: "ctrl+c", command: "editor.copy", when: "!terminalFocus && hasSelection" }];
+const rowsFor = (text: string) => buildRows(DEFAULTS, analyzeUserKeybindings(text));
 const copyRows = (text: string) => rowsFor(text).filter((r) => r.command === "editor.copy");
 
 describe("buildRows", () => {

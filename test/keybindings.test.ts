@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_KEYBINDINGS } from "../client/defaults";
 import { compileKeybindings, dispatchKeybinding, type Keybinding, matchKeybindings } from "../client/keybindings";
 import { parseChord } from "../client/keys";
 
 const ctrlC = parseChord("ctrl+c");
 
-describe("default bindings", () => {
-  const compiled = compileKeybindings(DEFAULT_KEYBINDINGS);
+// The terminal-aware copy binding recommended in the README.
+const COPY_BINDING: Keybinding = { key: "ctrl+c", command: "editor.copy", when: "!terminalFocus && hasSelection" };
+
+describe("terminal-aware copy binding", () => {
+  const compiled = compileKeybindings([COPY_BINDING]);
   const copy = vi.fn(() => true);
   const commands = { "editor.copy": copy };
 
@@ -95,5 +97,12 @@ describe("matchKeybindings / dispatchKeybinding", () => {
     const withArgs = compileKeybindings([{ key: "ctrl+c", command: "terminal.sendText", args: { text: "\u0003" } }]);
     dispatchKeybinding(withArgs, ctrlC, {}, { "terminal.sendText": run });
     expect(run).toHaveBeenCalledWith({ text: "\u0003" });
+  });
+});
+
+describe("DEFAULT_KEYBINDINGS", () => {
+  it("ships no bindings, so keys are untouched until the user adds some", async () => {
+    const { DEFAULT_KEYBINDINGS } = await import("../client/defaults");
+    expect(DEFAULT_KEYBINDINGS).toEqual([]);
   });
 });
