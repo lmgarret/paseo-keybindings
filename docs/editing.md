@@ -19,14 +19,16 @@ A table of every command with its keybinding, `when`, and source (Default, User,
 
 - Search by text, or with **Record Keys** to find what a key combination does.
 - Each row can be changed, added, removed, reset, or shown in the JSON.
-- The binding dialog records keys (press the combination, then Enter) and checks the `when` clause
-  as you type.
+- A binding that shares its key names the others (**Also on this key: …**). Click the warning to list
+  every binding on that key; clear the filter with the × in the search box.
+- The binding dialog records keys (press the combination, then Enter), lists the bindings already on
+  that key, and checks the `when` clause as you type.
 - Editing a Default or Paseo row adds a user binding plus a `-command` entry that frees the old key.
 
 **Paseo** rows are Paseo's shortcuts for your platform, with the rebinds saved in Paseo's
 Settings → Shortcuts applied. Rows covering a digit range (jump to workspace 1–9) or a multi-stroke
 key are read-only here. A binding on a Paseo key shows **Overrides Paseo: …**, and the Paseo row
-**Overridden by N bindings**.
+**Overridden by …**; both are clickable like the other collision warnings.
 
 ## JSON editor
 

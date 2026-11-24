@@ -34,8 +34,8 @@ export interface ShortcutRow {
   entryIndex?: number;
   /** Set when the row cannot be changed here (digit ranges and multi-stroke Paseo keys). */
   readOnly?: string;
-  /** Plugin rows: other plugin rows with the same key. Paseo rows: plugin rows that take its key. */
-  conflicts: number;
+  /** Titles of the colliding rows. Plugin rows: other plugin rows with the same key. Paseo rows: plugin rows that take its key. */
+  conflicts: string[];
   /** Plugin rows: Paseo shortcuts on the same key, which this binding overrides when it runs. */
   shadows: string[];
 }
@@ -87,7 +87,7 @@ export function nativeRows(platform: AppPlatform, overrides: PaseoOverrides = {}
       key: strokes ? strokes.map(formatStroke).join(" ") : "",
       note: notes.filter(Boolean).join("; ") || undefined,
       source: "paseo",
-      conflicts: 0,
+      conflicts: [],
       shadows: [],
     };
     if (shortcut.args) row.args = { ...shortcut.args };
@@ -137,7 +137,7 @@ export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings
       when: binding.when,
       args: binding.args,
       source: "default",
-      conflicts: 0,
+      conflicts: [],
       shadows: [],
     });
   });
@@ -153,12 +153,12 @@ export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings
       args: binding.args,
       source: "user",
       entryIndex: entry.index,
-      conflicts: 0,
+      conflicts: [],
       shadows: [],
     });
   }
   for (const row of plugin) {
-    if (row.key) row.conflicts = plugin.filter((other) => other !== row && other.key === row.key).length;
+    if (row.key) row.conflicts = plugin.filter((other) => other !== row && other.key === row.key).map((other) => other.title);
   }
 
   // A Paseo row is hidden when the user removed it, or binds the same command to the same key.
@@ -176,7 +176,7 @@ export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings
     const keys = rowKeys(nativeRow);
     for (const row of plugin) {
       if (!row.key || row.command === nativeRow.command || !keys.includes(row.key)) continue;
-      nativeRow.conflicts++;
+      nativeRow.conflicts.push(row.title);
       if (!row.shadows.includes(nativeRow.title)) row.shadows.push(nativeRow.title);
     }
   }
@@ -194,7 +194,7 @@ export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings
       key: "",
       note,
       source: "unbound",
-      conflicts: 0,
+      conflicts: [],
       shadows: [],
     });
   }
@@ -202,9 +202,13 @@ export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings
   return rows.sort((a, b) => a.title.localeCompare(b.title) || order[a.source] - order[b.source]);
 }
 
-/** Filters by free text, or by exact key when `recordedKey` is set ("Record Keys"). */
-export function filterRows(rows: readonly ShortcutRow[], query: string, recordedKey?: string): ShortcutRow[] {
-  if (recordedKey) return rows.filter((row) => rowKeys(row).includes(recordedKey));
+/**
+ * Filters by free text, or by exact key when `keys` is set ("Record Keys", or the keys of a row whose
+ * collisions are shown): rows answering to any of them.
+ */
+export function filterRows(rows: readonly ShortcutRow[], query: string, keys?: string | readonly string[]): ShortcutRow[] {
+  const wanted = typeof keys === "string" ? [keys] : keys;
+  if (wanted?.length) return rows.filter((row) => rowKeys(row).some((key) => wanted.includes(key)));
   const q = query.trim().toLowerCase();
   if (!q) return [...rows];
   return rows.filter((row) =>
