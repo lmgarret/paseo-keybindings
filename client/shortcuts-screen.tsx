@@ -15,6 +15,7 @@ import {
   hasUserEntries,
   removeRow,
   resetCommand,
+  rowKeys,
   type ShortcutRow,
 } from "./table-model";
 import { Banner, Button, KeyCaps, MONO, withAlpha } from "./ui-common";
@@ -75,6 +76,8 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
     const [query, setQuery] = useState("");
     const [recordingSearch, setRecordingSearch] = useState(false);
     const [recordedKey, setRecordedKey] = useState<string | undefined>();
+    // Set from a row's collision warning: shows every binding on that row's keys.
+    const [keyFilter, setKeyFilter] = useState<{ key: string; keys: string[] } | null>(null);
     const [dialog, setDialog] = useState<DialogState>(null);
     const [saving, setSaving] = useState(false);
 
@@ -86,7 +89,10 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
       return platform ? { platform, overrides: readPaseoOverrides() } : undefined;
     }, []);
     const rows = useMemo(() => buildRows(DEFAULT_KEYBINDINGS, user, paseo), [user, paseo]);
-    const visible = useMemo(() => filterRows(rows, query, recordedKey), [rows, query, recordedKey]);
+    const visible = useMemo(
+      () => filterRows(rows, query, recordedKey ?? keyFilter?.keys),
+      [rows, query, recordedKey, keyFilter],
+    );
     const errorCount = user.diagnostics.filter((d) => d.severity === "error").length;
     const readOnly = !file || !user.editable || saving;
 
@@ -149,25 +155,38 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
       ) : (
         <Text style={muted}>—</Text>
       );
-      const warning = { color: c.statusWarning, fontSize: 11 };
+      // Pressing a collision warning lists every binding on the row's keys.
+      const collision = (prefix: string, titles: string[]) => (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`${prefix} ${titles.join(", ")}. Show bindings on ${row.key}`}
+          onPress={() => {
+            setRecordingSearch(false);
+            setRecordedKey(undefined);
+            setKeyFilter({ key: row.key, keys: rowKeys(row) });
+          }}
+        >
+          {(state) => (
+            <Text
+              style={{
+                color: c.statusWarning,
+                fontSize: 11,
+                // `hovered` exists on react-native-web only.
+                textDecorationLine: (state as { hovered?: boolean }).hovered ? "underline" : "none",
+              }}
+              numberOfLines={2}
+            >
+              {prefix} {titles.join(", ")}
+            </Text>
+          )}
+        </Pressable>
+      );
       const conflicts = isPaseo ? (
-        row.conflicts > 0 ? (
-          <Text style={warning}>
-            Overridden by {row.conflicts} binding{row.conflicts > 1 ? "s" : ""}
-          </Text>
-        ) : null
+        row.conflicts.length > 0 ? collision("Overridden by", row.conflicts) : null
       ) : (
         <>
-          {row.conflicts > 0 ? (
-            <Text style={warning}>
-              {row.conflicts} other binding{row.conflicts > 1 ? "s" : ""}
-            </Text>
-          ) : null}
-          {row.shadows.length > 0 ? (
-            <Text style={warning} numberOfLines={2}>
-              Overrides Paseo: {row.shadows.join(", ")}
-            </Text>
-          ) : null}
+          {row.conflicts.length > 0 ? collision("Also on this key:", row.conflicts) : null}
+          {row.shadows.length > 0 ? collision("Overrides Paseo:", row.shadows) : null}
         </>
       );
       const sourceLabel = { user: "User", default: "Default", paseo: "Paseo", unbound: "" }[row.source];
@@ -262,7 +281,21 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
               }}
             >
               <Icon name={recordingSearch ? "Keyboard" : "Search"} size={14} color={c.foregroundMuted} />
-              {recordingSearch ? (
+              {keyFilter && !recordingSearch ? (
+                <View style={{ flex: 1, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={muted}>Bindings on</Text>
+                  <KeyCaps theme={theme} value={keyFilter.key} />
+                  {keyFilter.keys.length > 1 ? <Text style={muted}>… 9</Text> : null}
+                  <View style={{ flex: 1 }} />
+                  <Button
+                    theme={theme}
+                    icon="X"
+                    variant="ghost"
+                    accessibilityLabel="Clear key filter"
+                    onPress={() => setKeyFilter(null)}
+                  />
+                </View>
+              ) : recordingSearch ? (
                 <View style={{ flex: 1, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 8 }}>
                   {recordedKey ? (
                     <KeyCaps theme={theme} value={recordedKey} />
@@ -292,6 +325,7 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
                 variant={recordingSearch ? "primary" : "secondary"}
                 onPress={() => {
                   setRecordedKey(undefined);
+                  setKeyFilter(null);
                   setRecordingSearch((r) => !r);
                 }}
               />
@@ -350,6 +384,9 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
               dialog.mode === "add"
                 ? { key: "", args: dialog.row.args }
                 : { key: dialog.row.key, when: dialog.row.when, args: dialog.row.args }
+            }
+            bindingsOn={(key) =>
+              filterRows(rows, "", key).filter((row) => dialog.mode === "add" || row.id !== dialog.row.id)
             }
             onSave={onDialogSave}
             onClose={() => setDialog(null)}

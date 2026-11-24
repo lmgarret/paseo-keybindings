@@ -23,7 +23,7 @@ describe("buildRows", () => {
     ]`;
     expect(copyRows(text)).toMatchObject([{ source: "unbound" }]);
     const cut = rowsFor(text).find((r) => r.command === "editor.cut")!;
-    expect(cut).toMatchObject({ source: "user", entryIndex: 1, conflicts: 1 });
+    expect(cut).toMatchObject({ source: "user", entryIndex: 1, conflicts: ["Paste"] });
   });
 });
 
@@ -149,7 +149,7 @@ describe("Paseo rows", () => {
     const rows = rowsWith(text);
     expect(rows.find((r) => r.command === "editor.type")).toMatchObject({ shadows: ["New workspace"] });
     expect(rows.find((r) => r.command === "noop")).toMatchObject({ shadows: ["Close pane"] });
-    expect(rows.find((r) => r.source === "paseo" && r.title === "New workspace")).toMatchObject({ conflicts: 1 });
+    expect(rows.find((r) => r.source === "paseo" && r.title === "New workspace")).toMatchObject({ conflicts: ["Type"] });
   });
 
   it("sorts Paseo rows with the others by title", () => {
@@ -204,6 +204,8 @@ describe("Paseo rows", () => {
     const rows = rowsWith("");
     expect(filterRows(rows, "", "meta+n").map((r) => r.title)).toEqual(["New workspace"]);
     expect(filterRows(rows, "", "meta+5").map((r) => r.title)).toContain("Jump to workspace");
+    // Every binding on any key of a digit row.
+    expect(filterRows(rows, "", rowKeys({ key: "meta+1", digits: true })).map((r) => r.title)).toContain("Jump to workspace");
     const found = filterRows(rows, "paseo");
     expect(rows.filter((r) => r.source === "paseo").every((r) => found.includes(r))).toBe(true);
   });

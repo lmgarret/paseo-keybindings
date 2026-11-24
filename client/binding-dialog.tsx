@@ -6,6 +6,7 @@ import { CONTEXT_CATALOG, commandInfo } from "./catalog";
 import { parse, toValue } from "./jsonc";
 import type { Keybinding } from "./keybindings";
 import { formatChord, parseChord } from "./keys";
+import type { ShortcutRow } from "./table-model";
 import { Button, KeyCaps, MONO } from "./ui-common";
 import { canRecordKeys, recordKeys } from "./web";
 import { compileWhen, whenIdentifiers } from "./when";
@@ -16,6 +17,8 @@ export interface BindingDialogProps {
   title: string;
   command: string;
   initial: { key: string; when?: string; args?: unknown };
+  /** Other rows on a key (normalized), listed under the key as it is typed or recorded. */
+  bindingsOn?(key: string): ShortcutRow[];
   onSave(binding: Keybinding): void;
   onClose(): void;
 }
@@ -43,7 +46,7 @@ function validateWhen(when: string): { error: string | null; warning: string | n
 }
 
 /** Changes or adds a keybinding: key (typed or recorded), when clause, and args. */
-export function BindingDialog({ theme, open, title, command, initial, onSave, onClose }: BindingDialogProps) {
+export function BindingDialog({ theme, open, title, command, initial, bindingsOn, onSave, onClose }: BindingDialogProps) {
   const c = theme.colors;
   const info = commandInfo(command.replace(/^-/, ""));
   const takesArgs = initial.args !== undefined || info?.args !== undefined;
@@ -87,6 +90,7 @@ export function BindingDialog({ theme, open, title, command, initial, onSave, on
     return { error: null, value: parsed.root ? toValue(parsed.root) : undefined };
   }, [argsText, takesArgs]);
   const valid = !keyError && !whenCheck.error && !argsCheck.error;
+  const taken = useMemo(() => (keyError || !bindingsOn ? [] : bindingsOn(formatChord(parseChord(key)))), [key, keyError, bindingsOn]);
 
   const save = () => {
     if (!valid) return;
@@ -151,6 +155,20 @@ export function BindingDialog({ theme, open, title, command, initial, onSave, on
           </View>
           {recording ? <Text style={hint}>Press the key combination, then Enter. Escape cancels.</Text> : null}
           {!keyError ? <KeyCaps theme={theme} value={key} /> : message(keyError, recording ? c.foregroundMuted : c.statusDanger)}
+          {taken.length > 0 ? (
+            <View style={{ gap: 2 }}>
+              <Text style={{ color: c.statusWarning, fontSize: 12 }}>
+                Already used by:
+              </Text>
+              {taken.map((row) => (
+                <Text key={row.id} style={hint} numberOfLines={1}>
+                  <Text style={{ color: c.foreground }}>{row.title}</Text>
+                  {` · ${{ user: "User", default: "Default", paseo: "Paseo", unbound: "" }[row.source]}`}
+                  {row.when ? <Text style={{ fontFamily: MONO }}>{` · when ${row.when}`}</Text> : null}
+                </Text>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={{ gap: 6 }}>
