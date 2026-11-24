@@ -40,6 +40,10 @@ export interface ShortcutRow {
   shadows: string[];
 }
 
+export type RowSource = ShortcutRow["source"];
+export const SOURCES: readonly RowSource[] = ["user", "default", "paseo", "unbound"];
+const SOURCE_ORDER: Record<RowSource, number> = { user: 0, default: 1, paseo: 2, unbound: 3 };
+
 const normalize = (key: string) => {
   try {
     return formatChord(parseChord(key));
@@ -198,24 +202,99 @@ export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings
       shadows: [],
     });
   }
-  const order = { user: 0, default: 1, paseo: 2, unbound: 3 };
-  return rows.sort((a, b) => a.title.localeCompare(b.title) || order[a.source] - order[b.source]);
+  return rows.sort((a, b) => a.title.localeCompare(b.title) || SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source]);
 }
 
+/** Field filters in a search query, VS Code style: `@source:user`, `@command:copy`, `@keybinding:ctrl`, `@when:focus`. */
+const FIELD_ALIASES: Record<string, "source" | "command" | "key" | "when"> = {
+  source: "source",
+  command: "command",
+  keybinding: "key",
+  key: "key",
+  when: "when",
+};
+const FIELD_TOKEN = /(^|\s)@(\w+):(\S*)/g;
+
+export interface ParsedQuery {
+  /** Values per field; values of one field are alternatives, fields must all match. */
+  fields: Partial<Record<"source" | "command" | "key" | "when", string[]>>;
+  /** What is left once field filters are taken out, matched against every column. */
+  text: string;
+}
+
+export function parseQuery(query: string): ParsedQuery {
+  const fields: ParsedQuery["fields"] = {};
+  const text = query.replace(FIELD_TOKEN, (token, lead: string, name: string, value: string) => {
+    const field = FIELD_ALIASES[name.toLowerCase()];
+    if (!field) return token;
+    if (value) (fields[field] ??= []).push(value.toLowerCase());
+    return lead;
+  });
+  return { fields, text: text.replace(/\s+/g, " ").trim().toLowerCase() };
+}
+
+/** Adds or removes `@source:<source>` in a query (the source toggles above the table). */
+export function toggleSourceFilter(query: string, source: RowSource): string {
+  const active = parseQuery(query).fields.source?.includes(source);
+  if (active) {
+    const pattern = new RegExp(`(^|\\s)@source:${source}(?=\\s|$)`, "gi");
+    return query.replace(pattern, "").replace(/\s+/g, " ").trim();
+  }
+  return `@source:${source} ${query.trim()}`.trim();
+}
+
+const condition = (row: ShortcutRow) => row.when ?? row.note ?? "";
+
 /**
- * Filters by free text, or by exact key when `keys` is set ("Record Keys", or the keys of a row whose
- * collisions are shown): rows answering to any of them.
+ * Filters by query (free text plus `@field:value` filters), or by exact key when `keys` is set
+ * ("Record Keys", or the keys of a row whose collisions are shown): rows answering to any of them.
  */
 export function filterRows(rows: readonly ShortcutRow[], query: string, keys?: string | readonly string[]): ShortcutRow[] {
   const wanted = typeof keys === "string" ? [keys] : keys;
   if (wanted?.length) return rows.filter((row) => rowKeys(row).some((key) => wanted.includes(key)));
-  const q = query.trim().toLowerCase();
-  if (!q) return [...rows];
-  return rows.filter((row) =>
-    [row.title, row.command, row.key, row.when ?? "", row.note ?? "", row.source].some((field) =>
-      field.toLowerCase().includes(q),
-    ),
+  const { fields, text } = parseQuery(query);
+  const has = (value: string, wanted: string[] | undefined) => !wanted || wanted.some((w) => value.toLowerCase().includes(w));
+  return rows.filter(
+    (row) =>
+      has(row.source, fields.source) &&
+      (!fields.command || fields.command.some((w) => row.command.toLowerCase().includes(w) || row.title.toLowerCase().includes(w))) &&
+      has(row.key, fields.key) &&
+      has(condition(row), fields.when) &&
+      (!text ||
+        [row.title, row.command, row.key, row.when ?? "", row.note ?? "", row.source].some((field) =>
+          field.toLowerCase().includes(text),
+        )),
   );
+}
+
+export type SortColumn = "command" | "key" | "when" | "source";
+export interface SortOrder {
+  column: SortColumn;
+  descending?: boolean;
+}
+
+/** Sorts by a column; rows with an empty cell stay last either way, ties fall back to the title. */
+export function sortRows(rows: readonly ShortcutRow[], order: SortOrder): ShortcutRow[] {
+  const value = (row: ShortcutRow): string | number =>
+    order.column === "command"
+      ? row.title
+      : order.column === "key"
+        ? row.key
+        : order.column === "when"
+          ? condition(row)
+          : SOURCE_ORDER[row.source];
+  const sign = order.descending ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    if (va === "" || vb === "") {
+      if (va !== vb) return va === "" ? 1 : -1;
+    } else {
+      const byColumn = typeof va === "number" ? va - (vb as number) : va.localeCompare(vb as string);
+      if (byColumn !== 0) return sign * byColumn;
+    }
+    return a.title.localeCompare(b.title) || SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source];
+  });
 }
 
 // ---------------------------------------------------------------------------

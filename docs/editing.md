@@ -18,6 +18,11 @@ Both screens open from the Command Center (Cmd/Ctrl+K).
 A table of every command with its keybinding, `when`, and source (Default, User, or Paseo).
 
 - Search by text, or with **Record Keys** to find what a key combination does.
+- Narrow a search to one column with `@source:user`, `@command:copy`, `@keybinding:ctrl+k`, or
+  `@when:terminalFocus`. The User / Default / Paseo / Unbound toggles above the table add and remove
+  `@source:` filters.
+- Click a column header to sort by it; click again to reverse, a third time for the default order.
+- User rows have an accent bar on the left.
 - Each row can be changed, added, removed, reset, or shown in the JSON.
 - A binding that shares its key names the others (**Also on this key: …**). Click the warning to list
   every binding on that key; clear the filter with the × in the search box.
