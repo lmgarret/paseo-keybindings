@@ -13,10 +13,17 @@ import {
   editRow,
   filterRows,
   hasUserEntries,
+  parseQuery,
   removeRow,
   resetCommand,
+  type RowSource,
   rowKeys,
   type ShortcutRow,
+  SOURCES,
+  type SortColumn,
+  type SortOrder,
+  sortRows,
+  toggleSourceFilter,
 } from "./table-model";
 import { Banner, Button, KeyCaps, MONO, withAlpha } from "./ui-common";
 import { useKeybindingsFile } from "./use-keybindings-file";
@@ -28,6 +35,8 @@ export interface ShortcutsNavigation {
 }
 
 type DialogState = { mode: "edit" | "add"; row: ShortcutRow } | null;
+
+const SOURCE_LABELS: Record<RowSource, string> = { user: "User", default: "Default", paseo: "Paseo", unbound: "Unbound" };
 
 function RowActions({
   theme,
@@ -80,6 +89,8 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
     const [keyFilter, setKeyFilter] = useState<{ key: string; keys: string[] } | null>(null);
     const [dialog, setDialog] = useState<DialogState>(null);
     const [saving, setSaving] = useState(false);
+    // undefined: by title, the table's natural order.
+    const [sort, setSort] = useState<SortOrder | undefined>();
 
     const text = file?.text ?? "";
     const user = useMemo(() => analyzeUserKeybindings(text), [text]);
@@ -89,10 +100,16 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
       return platform ? { platform, overrides: readPaseoOverrides() } : undefined;
     }, []);
     const rows = useMemo(() => buildRows(DEFAULT_KEYBINDINGS, user, paseo), [user, paseo]);
-    const visible = useMemo(
-      () => filterRows(rows, query, recordedKey ?? keyFilter?.keys),
-      [rows, query, recordedKey, keyFilter],
-    );
+    const visible = useMemo(() => {
+      const filtered = filterRows(rows, query, recordedKey ?? keyFilter?.keys);
+      return sort ? sortRows(filtered, sort) : filtered;
+    }, [rows, query, recordedKey, keyFilter, sort]);
+    const activeSources = useMemo(() => parseQuery(query).fields.source ?? [], [query]);
+    // Header clicks cycle ascending → descending → back to the natural order.
+    const cycleSort = (column: SortColumn) =>
+      setSort((current) =>
+        current?.column !== column ? { column } : current.descending ? undefined : { column, descending: true },
+      );
     const errorCount = user.diagnostics.filter((d) => d.severity === "error").length;
     const readOnly = !file || !user.editable || saving;
 
@@ -189,8 +206,14 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
           {row.shadows.length > 0 ? collision("Overrides Paseo:", row.shadows) : null}
         </>
       );
-      const sourceLabel = { user: "User", default: "Default", paseo: "Paseo", unbound: "" }[row.source];
-      const source = <Text style={[muted, { color: row.source === "user" ? c.accent : c.foregroundMuted }]}>{sourceLabel}</Text>;
+      const isUser = row.source === "user";
+      const source = (
+        <Text style={[muted, isUser ? { color: c.accent, fontWeight: "600" } : null]}>
+          {row.source === "unbound" ? "" : SOURCE_LABELS[row.source]}
+        </Text>
+      );
+      // User rows get an accent bar on the left, like VS Code's "modified" marker in its settings editor.
+      const marker = { borderLeftWidth: 2, borderLeftColor: isUser ? c.accent : "transparent" };
       const condition = row.when ?? row.note ?? "";
       const conditionStyle = row.note && !row.when ? { fontStyle: "italic" as const } : { fontFamily: MONO };
       const onPress = () => {
@@ -204,7 +227,7 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
             onPress={onPress}
             accessibilityRole="button"
             accessibilityLabel={`${row.title}, ${row.key || "unbound"}`}
-            style={{ padding: 12, gap: 6, borderBottomWidth: 1, borderBottomColor: c.border }}
+            style={{ padding: 12, paddingLeft: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: c.border, ...marker }}
           >
             <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
               <Text style={[cell, { fontWeight: "600", flex: 1 }]}>{row.title}</Text>
@@ -230,10 +253,12 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
             flexDirection: "row",
             alignItems: "center",
             gap: 12,
-            paddingHorizontal: 16,
+            paddingLeft: 14,
+            paddingRight: 16,
             paddingVertical: 8,
             borderBottomWidth: 1,
             borderBottomColor: c.border,
+            ...marker,
             // `hovered` exists on react-native-web only.
             backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? withAlpha(c.accent, 0.06) : "transparent",
           })}
@@ -259,9 +284,51 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
       );
     };
 
-    const header = (label: string, style: object) => (
-      <Text style={[muted, { fontWeight: "600", textTransform: "uppercase", fontSize: 11 }, style]}>{label}</Text>
-    );
+    const header = (label: string, column: SortColumn, style: object) => {
+      const active = sort?.column === column;
+      const direction = active ? (sort.descending ? "descending" : "ascending") : undefined;
+      return (
+        <Pressable
+          onPress={() => cycleSort(column)}
+          accessibilityRole="button"
+          accessibilityLabel={`Sort by ${label}${direction ? `, ${direction}` : ""}`}
+          style={[{ flexDirection: "row", alignItems: "center", gap: 4 }, style]}
+        >
+          <Text style={[muted, { fontWeight: "600", textTransform: "uppercase", fontSize: 11 }, active ? { color: c.foreground } : null]}>
+            {label}
+          </Text>
+          {active ? <Icon name={sort.descending ? "ArrowDown" : "ArrowUp"} size={12} color={c.foreground} /> : null}
+        </Pressable>
+      );
+    };
+
+    const sourceChip = (source: RowSource) => {
+      const active = activeSources.includes(source);
+      return (
+        <Pressable
+          key={source}
+          onPress={() => {
+            setRecordingSearch(false);
+            setRecordedKey(undefined);
+            setKeyFilter(null);
+            setQuery((q) => toggleSourceFilter(q, source));
+          }}
+          accessibilityRole="button"
+          accessibilityState={{ selected: active }}
+          accessibilityLabel={`Show ${SOURCE_LABELS[source]} keybindings`}
+          style={{
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: active ? c.accent : c.border,
+            backgroundColor: active ? withAlpha(c.accent, 0.12) : "transparent",
+          }}
+        >
+          <Text style={[muted, { fontSize: 11 }, active ? { color: c.accent } : null]}>{SOURCE_LABELS[source]}</Text>
+        </Pressable>
+      );
+    };
 
     return (
       <View style={{ flex: 1, backgroundColor: c.surface0 }}>
@@ -307,7 +374,7 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
                 <TextInput
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="Type to search in keybindings"
+                  placeholder="Search keybindings (@source:user, @command:, @keybinding:, @when:)"
                   placeholderTextColor={c.foregroundMuted}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -355,16 +422,20 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
               {user.diagnostics.length} problem{user.diagnostics.length === 1 ? "" : "s"} in keybindings.json. Invalid entries are ignored.
             </Banner>
           ) : null}
-          <Text style={muted}>
-            {file ? `${file.path}${file.exists ? "" : " (not created yet)"}` : "Loading…"} · {visible.length} of {rows.length}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <Text style={[muted, { flexShrink: 1 }]}>
+              {file ? `${file.path}${file.exists ? "" : " (not created yet)"}` : "Loading…"} · {visible.length} of {rows.length}
+            </Text>
+            <View style={{ flex: 1 }} />
+            <View style={{ flexDirection: "row", gap: 4 }}>{SOURCES.map(sourceChip)}</View>
+          </View>
         </View>
         {compact ? null : (
           <View style={{ flexDirection: "row", gap: 12, paddingHorizontal: 16, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: c.border }}>
-            {header("Command", { flex: 3 })}
-            {header("Keybinding", { flex: 2 })}
-            {header("When", { flex: 3 })}
-            {header("Source", { width: 60 })}
+            {header("Command", "command", { flex: 3 })}
+            {header("Keybinding", "key", { flex: 2 })}
+            {header("When", "when", { flex: 3 })}
+            {header("Source", "source", { width: 60 })}
             <View style={{ width: 150 }} />
           </View>
         )}

@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { Keybinding } from "../client/keybindings";
-import { addBinding, buildRows, editRow, filterRows, nativeRows, removeRow, resetCommand, rowKeys } from "../client/table-model";
+import {
+  addBinding,
+  buildRows,
+  editRow,
+  filterRows,
+  nativeRows,
+  parseQuery,
+  removeRow,
+  resetCommand,
+  rowKeys,
+  sortRows,
+  toggleSourceFilter,
+} from "../client/table-model";
 import type { NativeShortcut } from "../client/native-shortcuts";
 import { analyzeUserKeybindings } from "../client/user-bindings";
 
@@ -42,6 +54,48 @@ describe("filterRows", () => {
   it("matches an exact recorded key", () => {
     expect(filterRows(rows, "ignored", "ctrl+c").map((r) => r.command)).toEqual(["editor.copy"]);
     expect(filterRows(rows, "", "ctrl+x")).toEqual([]);
+  });
+});
+
+describe("field filters", () => {
+  const rows = rowsFor(`[{ "key": "ctrl+v", "command": "editor.paste", "when": "inputFocus" }]`);
+
+  it("parses @field:value tokens and keeps the rest as free text", () => {
+    expect(parseQuery("@source:user  copy @keybinding:Ctrl @nope:x")).toEqual({
+      fields: { source: ["user"], key: ["ctrl"] },
+      text: "copy @nope:x",
+    });
+    expect(parseQuery("@source:").fields).toEqual({});
+  });
+
+  it("filters by source, command, keybinding, and when", () => {
+    expect(filterRows(rows, "@source:user").map((r) => r.command)).toEqual(["editor.paste"]);
+    expect(filterRows(rows, "@source:user @source:default").map((r) => r.source).sort()).toEqual(["default", "user"]);
+    expect(filterRows(rows, "@keybinding:ctrl+c").map((r) => r.command)).toEqual(["editor.copy"]);
+    expect(filterRows(rows, "@when:inputfocus").map((r) => r.command)).toEqual(["editor.paste"]);
+    expect(filterRows(rows, "@command:copy @source:default").map((r) => r.command)).toEqual(["editor.copy"]);
+  });
+
+  it("toggles @source tokens in the query", () => {
+    expect(toggleSourceFilter("copy", "user")).toBe("@source:user copy");
+    expect(toggleSourceFilter("@source:user copy", "user")).toBe("copy");
+    expect(toggleSourceFilter("x @source:user @source:paseo", "user")).toBe("x @source:paseo");
+  });
+});
+
+describe("sortRows", () => {
+  const rows = rowsFor(`[{ "key": "ctrl+v", "command": "editor.paste", "when": "inputFocus" }]`);
+
+  it("sorts by key with unbound rows last in both directions", () => {
+    const keys = (descending?: boolean) => sortRows(rows, { column: "key", descending }).map((r) => r.key);
+    expect(keys().slice(0, 2)).toEqual(["ctrl+c", "ctrl+v"]);
+    expect(keys(true).slice(0, 2)).toEqual(["ctrl+v", "ctrl+c"]);
+    expect(keys(true).at(-1)).toBe("");
+  });
+
+  it("sorts by source", () => {
+    expect(sortRows(rows, { column: "source" }).slice(0, 2).map((r) => r.source)).toEqual(["user", "default"]);
+    expect(sortRows(rows, { column: "source", descending: true })[0].source).toBe("unbound");
   });
 });
 
