@@ -199,9 +199,10 @@ export function createShortcutsScreen(navigation: ShortcutsNavigation) {
         </Pressable>
       );
       const conflicts = isPaseo ? (
-        row.conflicts.length > 0 ? collision("Overridden by", row.conflicts) : null
+        row.conflicts.length > 0 ? collision(row.menu === "blocks" ? "Blocks" : "Overridden by", row.conflicts) : null
       ) : (
         <>
+          {row.blockedBy?.length ? collision("Never runs, Paseo's menu takes the key:", row.blockedBy) : null}
           {row.conflicts.length > 0 ? collision("Also on this key:", row.conflicts) : null}
           {row.shadows.length > 0 ? collision("Overrides Paseo:", row.shadows) : null}
         </>

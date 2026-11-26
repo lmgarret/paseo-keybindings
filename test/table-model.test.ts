@@ -5,11 +5,13 @@ import {
   buildRows,
   editRow,
   filterRows,
+  menuRows,
   nativeRows,
   parseQuery,
   removeRow,
   resetCommand,
   rowKeys,
+  type ShortcutRow,
   sortRows,
   toggleSourceFilter,
 } from "../client/table-model";
@@ -274,5 +276,51 @@ describe("Paseo rows", () => {
       source: "unbound",
       note: expect.stringMatching(/no key/),
     });
+  });
+});
+
+describe("desktop menu rows", () => {
+  const MAC = { mac: true, desktop: true };
+  const LINUX = { mac: false, desktop: true };
+  const WEB = { mac: true, desktop: false };
+  const rowsWith = (text: string, platform = MAC) =>
+    buildRows([], analyzeUserKeybindings(text), { platform, overrides: {}, shortcuts: [] });
+  const menu = (rows: ShortcutRow[]) => rows.filter((r) => r.menu);
+
+  it("lists the menu's keys for the platform, read-only, on desktop only", () => {
+    expect(menuRows(MAC).find((r) => r.title === "Zoom In")).toMatchObject({
+      key: "meta+=",
+      source: "paseo",
+      menu: "blocks",
+      readOnly: expect.any(String),
+    });
+    expect(menuRows(MAC).find((r) => r.title === "Reload")).toMatchObject({ key: "meta+r", menu: "overridable" });
+    expect(menuRows(LINUX).map((r) => r.key)).toEqual(["ctrl+=", "ctrl+-", "ctrl+0"]);
+    expect(menuRows(WEB)).toEqual([]);
+    expect(menuRows(MAC, [{ id: "menu.x", label: "X", menu: "View", other: "ctrl+x", blocks: true }])).toEqual([]);
+  });
+
+  it("flags bindings the menu blocks, both ways, whatever their when clause", () => {
+    const text = `[
+      { "key": "cmd+=", "command": "editor.type", "args": { "text": "x" }, "when": "terminalFocus" },
+      { "key": "cmd+k", "command": "noop" }
+    ]`;
+    const rows = rowsWith(text);
+    expect(rows.find((r) => r.command === "editor.type")).toMatchObject({ blockedBy: ["Zoom In"], shadows: [] });
+    expect(rows.find((r) => r.command === "noop")?.blockedBy).toBeUndefined();
+    expect(menu(rows).find((r) => r.title === "Zoom In")).toMatchObject({ conflicts: ["Type"] });
+  });
+
+  it("flags bindings that override a menu item the page gets first", () => {
+    const rows = rowsWith(`[{ "key": "cmd+r", "command": "noop" }]`);
+    expect(rows.find((r) => r.command === "noop")).toMatchObject({ shadows: ["Reload"] });
+    expect(rows.find((r) => r.command === "noop")?.blockedBy).toBeUndefined();
+    expect(menu(rows).find((r) => r.title === "Reload")).toMatchObject({ conflicts: ["No Operation"] });
+  });
+
+  it("shows up when filtering by key, and not without a platform", () => {
+    expect(filterRows(rowsWith(""), "", "meta+-").map((r) => r.title)).toEqual(["Zoom Out"]);
+    expect(filterRows(rowsWith("", LINUX), "", "ctrl+r")).toEqual([]);
+    expect(menu(buildRows([], analyzeUserKeybindings("")))).toEqual([]);
   });
 });

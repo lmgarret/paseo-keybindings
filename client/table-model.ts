@@ -2,6 +2,7 @@
 import { ALL_COMMANDS, canonicalCommand, commandInfo } from "./catalog";
 import type { Keybinding } from "./keybindings";
 import { chordsEqual, formatChord, parseChord } from "./keys";
+import { MENU_SHORTCUTS, type MenuShortcut } from "./menu-shortcuts";
 import { NATIVE_SHORTCUTS, type NativeShortcut } from "./native-shortcuts";
 import { type AppPlatform, formatStroke, type PaseoOverrides, platformBindings } from "./paseo-actions";
 import {
@@ -38,6 +39,13 @@ export interface ShortcutRow {
   conflicts: string[];
   /** Plugin rows: Paseo shortcuts on the same key, which this binding overrides when it runs. */
   shadows: string[];
+  /**
+   * Paseo's desktop menu item ("paseo" rows only). "blocks": the menu takes the key before the page,
+   * so bindings on it never run. "overridable": the page gets the key first, so a binding overrides it.
+   */
+  menu?: "blocks" | "overridable";
+  /** Plugin rows: menu items on the same key, which take it first, so this binding never runs. */
+  blockedBy?: string[];
 }
 
 export type RowSource = ShortcutRow["source"];
@@ -105,6 +113,34 @@ export function nativeRows(platform: AppPlatform, overrides: PaseoOverrides = {}
   });
 }
 
+const MENU_READ_ONLY = {
+  blocks: "Paseo's desktop menu takes this key before the page sees it: it cannot be changed or freed here",
+  overridable: "A shortcut of Paseo's desktop menu: its key cannot be changed here, but a binding on it overrides it",
+};
+
+/** Paseo's desktop menu shortcuts on this platform as read-only rows (none in a browser). */
+export function menuRows(platform: AppPlatform, shortcuts: readonly MenuShortcut[] = MENU_SHORTCUTS): ShortcutRow[] {
+  if (!platform.desktop) return [];
+  return shortcuts.flatMap((shortcut) => {
+    const key = platform.mac ? shortcut.mac : shortcut.other;
+    if (!key) return [];
+    return [
+      {
+        id: `menu-${shortcut.id}`,
+        command: shortcut.id,
+        title: shortcut.label,
+        key: normalize(key),
+        note: `Desktop menu: ${shortcut.menu} → ${shortcut.label}`,
+        source: "paseo" as const,
+        menu: shortcut.blocks ? ("blocks" as const) : ("overridable" as const),
+        readOnly: MENU_READ_ONLY[shortcut.blocks ? "blocks" : "overridable"],
+        conflicts: [],
+        shadows: [],
+      },
+    ];
+  });
+}
+
 /** True when a user "-command" entry removes this default (or Paseo) binding. */
 export function isDefaultRemoved(binding: Keybinding, userBindings: readonly Keybinding[]): boolean {
   const command = canonicalCommand(binding.command);
@@ -122,6 +158,8 @@ export interface PaseoContext {
   overrides?: PaseoOverrides;
   /** Defaults to the generated table; tests pass their own. */
   shortcuts?: readonly NativeShortcut[];
+  /** Defaults to Paseo's desktop menu; tests pass their own. */
+  menuShortcuts?: readonly MenuShortcut[];
 }
 
 /**
@@ -185,7 +223,17 @@ export function buildRows(defaults: readonly Keybinding[], user: UserKeybindings
     }
   }
 
-  const rows = [...plugin, ...native];
+  const menu = paseo ? menuRows(paseo.platform, paseo.menuShortcuts) : [];
+  for (const menuRow of menu) {
+    for (const row of plugin) {
+      if (row.key !== menuRow.key) continue;
+      menuRow.conflicts.push(row.title);
+      if (menuRow.menu === "blocks") (row.blockedBy ??= []).push(menuRow.title);
+      else if (!row.shadows.includes(menuRow.title)) row.shadows.push(menuRow.title);
+    }
+  }
+
+  const rows = [...plugin, ...native, ...menu];
   const listed = new Set(rows.map((row) => row.command));
   for (const command of ALL_COMMANDS) {
     if (listed.has(command.id)) continue;

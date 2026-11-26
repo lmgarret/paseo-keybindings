@@ -2,7 +2,13 @@
 
 - Desktop and web only. On iOS/Android the plugin is a no-op, though you can still edit the file.
 - Single-stroke keys only (no `ctrl+k ctrl+c` chords).
-- Electron menu accelerators can consume some keys before the page sees them.
+- Paseo's desktop menu takes some keys before the page sees them, so bindings on them never run:
+  Cmd/Ctrl+= and Cmd/Ctrl+- (zoom), Cmd/Ctrl+0 (actual size), and on macOS Cmd+H, Cmd+Alt+H, Cmd+Q,
+  Cmd+M, and Ctrl+Cmd+F. Its other macOS keys (Cmd+Shift+N, Cmd+R, Cmd+Shift+R, Cmd+Alt+I) reach
+  the page first, so a binding on them replaces the menu item. The plugin cannot run menu items or
+  change their keys; the table lists them read-only. On Linux and Windows only the zoom keys are
+  listed: the others are untested. The key recorder turns the zoom keys off while it records, but
+  cannot record the other blocked keys (pressing them hides, minimizes, or quits the app).
 - The file lives on the daemon host, so each host has its own bindings.
 - No `composerFocus` context: the composer has no stable DOM marker to target. Paseo's composer
   actions still apply Paseo's own focus rules.
