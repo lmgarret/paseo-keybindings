@@ -610,6 +610,7 @@ export function recordKeys(handlers: {
 }): () => void {
   if (!canRecordKeys) return () => {};
   shared.__paseoKeybindingsRecording = (shared.__paseoKeybindingsRecording ?? 0) + 1;
+  if (shared.__paseoKeybindingsRecording === 1) setMenuCapturing(true);
   const onKeyDown: KeydownListener = (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -627,7 +628,19 @@ export function recordKeys(handlers: {
     stopped = true;
     window.removeEventListener("keydown", onKeyDown, true);
     shared.__paseoKeybindingsRecording = Math.max(0, (shared.__paseoKeybindingsRecording ?? 1) - 1);
+    if (shared.__paseoKeybindingsRecording === 0) setMenuCapturing(false);
   };
+}
+
+/**
+ * Turns off the desktop menu's zoom accelerators (Cmd/Ctrl+=, -, 0) while recording, as Paseo does
+ * for its own shortcut recorder, so those keys can be recorded. The menu's other keys stay on; the
+ * page gets some of them first (reload, new window), which the recorder then takes. No-op in a browser.
+ */
+function setMenuCapturing(capturing: boolean): void {
+  const desktop = (globalThis as { paseoDesktop?: { menu?: { setCapturingShortcut?(capturing: boolean): Promise<unknown> } } })
+    .paseoDesktop;
+  desktop?.menu?.setCapturingShortcut?.(capturing)?.catch(() => {});
 }
 
 // ---------------------------------------------------------------------------

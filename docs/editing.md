@@ -35,6 +35,13 @@ Settings → Shortcuts applied. Rows covering a digit range (jump to workspace 1
 key are read-only here. A binding on a Paseo key shows **Overrides Paseo: …**, and the Paseo row
 **Overridden by …**; both are clickable like the other collision warnings.
 
+In the desktop app, the table also lists the shortcuts of Paseo's desktop menu (zoom, reload, new
+window, hide, quit, ...) as read-only Paseo rows. For keys the menu takes first (zoom, and on macOS
+hide, quit, minimize, full screen), a binding shows **Never runs, Paseo's menu takes the key: …**,
+and the menu row **Blocks …**. For the others, a binding overrides the menu item like any Paseo
+shortcut. The key recorder turns the zoom keys off while it records, as Paseo's own shortcut
+settings do.
+
 ## JSON editor
 
 **Preferences: Open Keyboard Shortcuts (JSON)**, or **Open JSON** in the table.
